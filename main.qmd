@@ -435,6 +435,12 @@ sim_output |>
 It is very difficult to try to estimate the sampling effort. In our case, the sample maxima likely come from various sources (e.g. fishing competitions), that may have very different efforts. What we can do is estimate the maximum length based on some arbitrary number of fishing competitions, e.g. expected maximum to be caught for 100 fishing competitions.
 
 ```{r}
+#| fig-width: 8
+#| fig-asp: 0.65
+#| fig-align: center
+#| fig-cap: The estimated maximum length given 10, 100, or 1000 sampling efforts (e.g. fishing competitions), as indicated by the yellow, red, and blue vertical dashed lines respectively. 
+#| label: fig-number-efforts
+
 
 qgev_10comps <- qgev_est(10/(10+1))
 qgev_100comps <- qgev_est(100/(100+1))
@@ -458,3 +464,5 @@ tibble(x = seq(80, 120, by = 0.1)) %>%
   theme_minimal()
 
 ```
+
+\##
