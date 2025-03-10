@@ -49,3 +49,11 @@ po/*~
 rsconnect/
 
 evt_plots/
+
+stan_outputs/
+
+max_posterior/
+
+other/
+
+old/

@@ -124,7 +124,7 @@ G(x; \mu, \sigma, \xi) = exp(-[1 + \xi(\frac{x-\mu}{\sigma})]^{-1/\xi})
 </div>
 </div>
 </div>
-<p>Given 100 samples, each of length 1000, from a normal distribution (<span class="math inline">\(\mu\)</span> = 0, <span class="math inline">\(\sigma\)</span> = 1), we take the maxima of those samples and look at the distribution of those 100 maxima. According to theory, they should follow the GEV distribution.</p>
+<p>Given 100 samples, each of length 1000, from a normal distribution (<span class="math inline">\(\mu\)</span> = 0, <span class="math inline">\(\sigma\)</span> = 1), we take the maxima of those 100 samples and look at the distribution of those 100 maxima. According to theory, they should follow the GEV distribution.</p>
 <div class="cell" data-layout-align="center">
 <div class="cell-output-display">
 <div id="fig-maxima-distribution" class="quarto-figure quarto-figure-center anchored">
@@ -178,7 +178,7 @@ G(x; \mu, \sigma, \xi) = exp(-[1 + \xi(\frac{x-\mu}{\sigma})]^{-1/\xi})
 </div>
 </div>
 <p>In this simple case the estimated maximum length is determined by the sampling effort. The greater the sampling effort, the more likely you are to observe extreme length measures. It is therefore important to account for the sampling effort in the estimation to be clear as to what it is you are estimating. Using 10 sample maxima, each derived from a sample size of 1000, we observe the estimated LMAX to be between the 99.9th percentile and the 99.99th percentile. If we have larger sample sizes, it can be expected that this sample size increases.</p>
-<p>We can vary the sample size and the number of samples (i.e.&nbsp;the number of maxima) and see how this varies the ‘true’ percentile that is being estimated.</p>
+<p>We can see that increasing the size of the sample by 10-fold, increases the percentile being estimated by a similar 10-fold proportion (e.g.&nbsp;99th to 99.9th percentile).</p>
 <div class="cell" data-layout-align="center">
 <div class="cell-output-display">
 <div id="fig-percentile-estimated" class="quarto-figure quarto-figure-center anchored">
@@ -187,6 +187,29 @@ G(x; \mu, \sigma, \xi) = exp(-[1 + \xi(\frac{x-\mu}{\sigma})]^{-1/\xi})
 <figcaption class="figure-caption">Figure&nbsp;7: The size of the samples that the maximum is derived is important. The number of samples that you have is also important, but this would be known.</figcaption>
 </figure>
 </div>
+</div>
+</div>
+<section id="accounting-for-sampling-effort" class="level2">
+<h2 class="anchored" data-anchor-id="accounting-for-sampling-effort">Accounting for sampling effort</h2>
+<p>It is very difficult to try to estimate the sampling effort. In our case, the sample maxima likely come from various sources (e.g.&nbsp;fishing competitions), that may have very different efforts. What we can do is estimate the maximum length based on some arbitrary number of fishing competitions, e.g.&nbsp;expected maximum to be caught for 100 fishing competitions.</p>
+<div class="cell" data-layout-align="center">
+<div class="cell-output-display">
+<div id="fig-number-efforts" class="quarto-figure quarto-figure-center anchored">
+<figure class="figure">
+<p><img src="main_files/figure-html/fig-number-efforts-1.png" class="img-fluid figure-img" width="768"></p>
+<figcaption class="figure-caption">Figure&nbsp;8: The estimated maximum length given 10, 100, or 1000 sampling efforts (e.g.&nbsp;fishing competitions), as indicated by the yellow, red, and blue vertical dashed lines respectively.</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="error-in-estimates" class="level1">
+<h1>Error in estimates</h1>
+<p>Using the evd package to fit our distribution means that we can extract the standard error in the estimates of the three parameters.</p>
+<div class="cell">
+<div class="cell-output-display">
+<p><img src="main_files/figure-html/unnamed-chunk-5-1.png" class="img-fluid" width="672"></p>
 </div>
 </div>
 
