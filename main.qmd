@@ -1,6 +1,16 @@
-
-```{r}
-\*--- title: "Statistical methods for estimating the maximum body length of fish species" format: html: theme: minty editor: visual execute: echo: false warning: false error: false message: false bibliography: references.bib ---
+--- 
+title: "Statistical methods for estimating the maximum body length of fish species" 
+format: 
+  html: 
+    theme: minty 
+    editor: visual 
+    execute: 
+    echo: false 
+    warning: false 
+    error: false 
+    message: false 
+    bibliography: references.bib 
+---
 
 ```{r packages}
 library(tidyverse)
