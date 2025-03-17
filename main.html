@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Improvements on the application of extreme value theory on estimating the maximum length of fishes</title>
+<title>Statistical methods for estimating the maximum body length of fish species</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -66,7 +66,7 @@ div.csl-indent {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Improvements on the application of extreme value theory on estimating the maximum length of fishes</h1>
+<h1 class="title">Statistical methods for estimating the maximum body length of fish species</h1>
 </div>
 
 
@@ -84,7 +84,7 @@ div.csl-indent {
 <section id="background" class="level1">
 <h1>Background</h1>
 <p>Extreme Value Theory (EVT) is a branch of statistics that focuses on the extreme deviations from the median of probability distributions. Traditionally, EVT has been applied in fields such as hydrology, finance, and environmental sciences to model and predict rare events, such as floods, market crashes, and extreme weather conditions.</p>
-<p>In this analysis, we extend the application of EVT to estimate the maximum lengths of fish species. While previous studies, such as <span class="citation" data-cites="formacion1991">Formacion (<a href="#ref-formacion1991" role="doc-biblioref">1991</a>)</span>, have utilized the Gumbel distribution for this purpose, we aim to incorporate the broader Extreme Value Distribution (EVD) framework. This approach allows for a more comprehensive analysis by considering different types of extreme value distributions, including the Gumbel, Fréchet, and Weibull distributions.</p>
+<p>In this analysis, we extend the application of EVT to estimate the maximum lengths of fish species. While previous studies, such as <span class="citation" data-cites="formacion_extreme_1991">Formacion (<a href="#ref-formacion_extreme_1991" role="doc-biblioref">1991</a>)</span>, have utilized the Gumbel distribution for this purpose, we aim to incorporate the broader Extreme Value Distribution (EVD) framework. This approach allows for a more comprehensive analysis by considering different types of extreme value distributions, including the Gumbel, Fréchet, and Weibull distributions.</p>
 <p>The Generalized Extreme Value (GEV) distribution is defined as:</p>
 <p><span class="math display">\[
 G(x; \mu, \sigma, \xi) = exp(-[1 + \xi(\frac{x-\mu}{\sigma})]^{-1/\xi})
@@ -94,54 +94,49 @@ G(x; \mu, \sigma, \xi) = exp(-[1 + \xi(\frac{x-\mu}{\sigma})]^{-1/\xi})
 <p>By applying the GEV distribution, we can better estimate the maximum lengths of fish species, providing valuable insights for ecological and biological studies.</p>
 <p>The Gumbel distribution is a simplified variation of the GEV distribution where <span class="math inline">\(\xi = 0\)</span>.</p>
 </section>
-<section id="gev" class="level1">
-<h1>GEV</h1>
+<section id="understanding-gev" class="level1">
+<h1>Understanding GEV</h1>
 <section id="shape-of-gev" class="level2">
 <h2 class="anchored" data-anchor-id="shape-of-gev">Shape of GEV</h2>
 <p>The shape of the GEV distribution is defined by the shape (<span class="math inline">\(\xi\)</span>) parameter. Below, location (<span class="math inline">\(\mu\)</span>) is fixed at zero, and scale (<span class="math inline">\(\sigma\)</span>) is fixed at one.</p>
-<div class="cell" data-layout-align="center">
+<div class="cell" data-hash="main_cache/html/gev-background_753ba5357702bcadfc52a5c47fc9b7cb">
 <div class="cell-output-display">
-<div id="fig-GEVshape" class="quarto-figure quarto-figure-center anchored">
-<figure class="figure">
-<p><img src="main_files/figure-html/fig-GEVshape-1.png" class="img-fluid figure-img" width="768"></p>
-<figcaption class="figure-caption">Figure&nbsp;1: Varying the shape parameter of the Generalised Extreme Value (GEV) distribution. The location and scale parameters are fixed at 0 and 1, respectively.</figcaption>
-</figure>
-</div>
+<p><img src="main_files/figure-html/gev-background-1.png" class="img-fluid" width="768"></p>
 </div>
 </div>
 </section>
-<section id="understanding-gev" class="level2">
-<h2 class="anchored" data-anchor-id="understanding-gev">Understanding GEV</h2>
+<section id="simulation-of-maxima" class="level2">
+<h2 class="anchored" data-anchor-id="simulation-of-maxima">Simulation of maxima</h2>
 <p>We can test the GEV distribution with simulated data.</p>
 <p>If we take a normal distribution with a mean of 0 and standard deviation of 1, and take a sample of length 1000, and calculate the maximum of this.</p>
-<div class="cell" data-layout-align="center">
+<div class="cell" data-hash="main_cache/html/fig-dnorm_b4c6b81fd505cf2135311b3a83cba07b">
 <div class="cell-output-display">
 <div id="fig-dnorm" class="quarto-figure quarto-figure-center anchored">
 <figure class="figure">
 <p><img src="main_files/figure-html/fig-dnorm-1.png" class="img-fluid figure-img" width="768"></p>
-<figcaption class="figure-caption">Figure&nbsp;2: A sample of length 1000 from a normal distribution with a mean of 0 and standard deviation of 1. The sampled values are indicated as the vertical lines along the x-axis, the maximum of this sample is indicated in red.</figcaption>
+<figcaption class="figure-caption">Figure&nbsp;1: A sample of length 1000 from a normal distribution with a mean of 0 and standard deviation of 1. The sampled values are indicated as the vertical lines along the x-axis, the maximum of this sample is indicated in red.</figcaption>
 </figure>
 </div>
 </div>
 </div>
 <p>Given 100 samples, each of length 1000, from a normal distribution (<span class="math inline">\(\mu\)</span> = 0, <span class="math inline">\(\sigma\)</span> = 1), we take the maxima of those 100 samples and look at the distribution of those 100 maxima. According to theory, they should follow the GEV distribution.</p>
-<div class="cell" data-layout-align="center">
+<div class="cell" data-hash="main_cache/html/fig-maxima-distribution_931167af759f25d46fa81b3bc15904ba">
 <div class="cell-output-display">
 <div id="fig-maxima-distribution" class="quarto-figure quarto-figure-center anchored">
 <figure class="figure">
 <p><img src="main_files/figure-html/fig-maxima-distribution-1.png" class="img-fluid figure-img" width="768"></p>
-<figcaption class="figure-caption">Figure&nbsp;3: The distribution of 100 sample maxima, that are derived from 100 samples of length 1000 from a normal distribution with a mean and standard deviation of 0 and 1, respectively.</figcaption>
+<figcaption class="figure-caption">Figure&nbsp;2: The distribution of 100 sample maxima, that are derived from 100 samples of length 1000 from a normal distribution with a mean and standard deviation of 0 and 1, respectively.</figcaption>
 </figure>
 </div>
 </div>
 </div>
 <p>Since there is variation in the sampling, we can run this multiple times, each with a new seed, to see how much variation there is.</p>
-<div class="cell" data-layout-align="center">
+<div class="cell" data-hash="main_cache/html/fig-maxima-distribution-multiple_065fed224e5b5dde6fe5609ff25119ab">
 <div class="cell-output-display">
 <div id="fig-maxima-distribution-multiple" class="quarto-figure quarto-figure-center anchored">
 <figure class="figure">
 <p><img src="main_files/figure-html/fig-maxima-distribution-multiple-1.png" class="img-fluid figure-img" width="768"></p>
-<figcaption class="figure-caption">Figure&nbsp;4: The distribution of 100 sample maxima, repeated 100 times.</figcaption>
+<figcaption class="figure-caption">Figure&nbsp;3: The distribution of 100 sample maxima, repeated 100 times.</figcaption>
 </figure>
 </div>
 </div>
@@ -149,75 +144,32 @@ G(x; \mu, \sigma, \xi) = exp(-[1 + \xi(\frac{x-\mu}{\sigma})]^{-1/\xi})
 </section>
 <section id="fitting-gev-to-simulated-maxima" class="level2">
 <h2 class="anchored" data-anchor-id="fitting-gev-to-simulated-maxima">Fitting GEV to simulated maxima</h2>
-<div class="cell" data-layout-align="center">
+<div class="cell" data-hash="main_cache/html/fig-GEVfitting-multiple_2f4ac39255f97b1723b4762457c2ece7">
 <div class="cell-output-display">
 <div id="fig-GEVfitting-multiple" class="quarto-figure quarto-figure-center anchored">
 <figure class="figure">
 <p><img src="main_files/figure-html/fig-GEVfitting-multiple-1.png" class="img-fluid figure-img" width="768"></p>
-<figcaption class="figure-caption">Figure&nbsp;5: Fitting 100 GEV distributions to 100 repeats, each of length 100 sample maxima.</figcaption>
+<figcaption class="figure-caption">Figure&nbsp;4: Fitting 100 GEV distributions to 100 repeats, each of length 100 sample maxima.</figcaption>
 </figure>
 </div>
 </div>
 </div>
 </section>
 </section>
-<section id="estimating-maxima" class="level1">
-<h1>Estimating maxima</h1>
+<section id="estimating-maxima-evt" class="level1">
+<h1>Estimating maxima (EVT)</h1>
 <p>The plots show that sample maxima can be well described by the GEV distribution. The following question from this, is how can we use the fitted GEV distribution to estimate the maximum of the underlying distribution.</p>
 <p>For this we will use a slightly more realistic example of the underlying ‘true’ population in relation to fish body lengths.</p>
-<p>The underlying ‘true’ distribution of body lengths within a population will be defined by a normal distribution with a mean of 50 (cm) and a standard deviation of 16.67 (= one third of 50).</p>
+<p>The underlying ‘true’ distribution of body lengths within a population will be defined by a normal distribution with a mean of 50 (cm) and a standard deviation of 16 (approximately one third of 50 - see Heather et al, <em>in review</em>).</p>
 <p>We will take 10 samples each of length 1000 from the underlying population, to get 10 sample maxima to estimate the GEV distribution.</p>
-<div class="cell" data-layout-align="center">
-<div class="cell-output-display">
-<div id="fig-estimate-lmax" class="quarto-figure quarto-figure-center anchored">
-<figure class="figure">
-<p><img src="main_files/figure-html/fig-estimate-lmax-1.png" class="img-fluid figure-img" width="768"></p>
-<figcaption class="figure-caption">Figure&nbsp;6: Estimating maximum length from 10 sample maxima. The sample maxima are calculated from samples of length 1000.</figcaption>
-</figure>
-</div>
-</div>
-</div>
 <p>In this simple case the estimated maximum length is determined by the sampling effort. The greater the sampling effort, the more likely you are to observe extreme length measures. It is therefore important to account for the sampling effort in the estimation to be clear as to what it is you are estimating. Using 10 sample maxima, each derived from a sample size of 1000, we observe the estimated LMAX to be between the 99.9th percentile and the 99.99th percentile. If we have larger sample sizes, it can be expected that this sample size increases.</p>
 <p>We can see that increasing the size of the sample by 10-fold, increases the percentile being estimated by a similar 10-fold proportion (e.g.&nbsp;99th to 99.9th percentile).</p>
-<div class="cell" data-layout-align="center">
-<div class="cell-output-display">
-<div id="fig-percentile-estimated" class="quarto-figure quarto-figure-center anchored">
-<figure class="figure">
-<p><img src="main_files/figure-html/fig-percentile-estimated-1.png" class="img-fluid figure-img" width="768"></p>
-<figcaption class="figure-caption">Figure&nbsp;7: The size of the samples that the maximum is derived is important. The number of samples that you have is also important, but this would be known.</figcaption>
-</figure>
-</div>
-</div>
-</div>
-<section id="accounting-for-sampling-effort" class="level2">
-<h2 class="anchored" data-anchor-id="accounting-for-sampling-effort">Accounting for sampling effort</h2>
-<p>It is very difficult to try to estimate the sampling effort. In our case, the sample maxima likely come from various sources (e.g.&nbsp;fishing competitions), that may have very different efforts. What we can do is estimate the maximum length based on some arbitrary number of fishing competitions, e.g.&nbsp;expected maximum to be caught for 100 fishing competitions.</p>
-<div class="cell" data-layout-align="center">
-<div class="cell-output-display">
-<div id="fig-number-efforts" class="quarto-figure quarto-figure-center anchored">
-<figure class="figure">
-<p><img src="main_files/figure-html/fig-number-efforts-1.png" class="img-fluid figure-img" width="768"></p>
-<figcaption class="figure-caption">Figure&nbsp;8: The estimated maximum length given 10, 100, or 1000 sampling efforts (e.g.&nbsp;fishing competitions), as indicated by the yellow, red, and blue vertical dashed lines respectively.</figcaption>
-</figure>
-</div>
-</div>
-</div>
-</section>
-</section>
-<section id="error-in-estimates" class="level1">
-<h1>Error in estimates</h1>
-<p>Using the evd package to fit our distribution means that we can extract the standard error in the estimates of the three parameters.</p>
-<div class="cell">
-<div class="cell-output-display">
-<p><img src="main_files/figure-html/unnamed-chunk-5-1.png" class="img-fluid" width="672"></p>
-</div>
-</div>
 
 </section>
 
 <div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body hanging-indent" role="list">
-<div id="ref-formacion1991" class="csl-entry" role="listitem">
-Formacion, Sonia P. 1991. <span>“Extreme Value Theory Applied to the Statistical Distribution of the Largest Lengths of Fish.”</span> <em>Asian Fisheries Science</em> 4 (2). <a href="https://doi.org/10.33997/j.afs.1991.4.2.001">https://doi.org/10.33997/j.afs.1991.4.2.001</a>.
+<div id="ref-formacion_extreme_1991" class="csl-entry" role="listitem">
+Formacion, Sonia P. 1991. <span>“Extreme <span>Value</span> <span>Theory</span> <span>Applied</span> to the <span>Statistical</span> <span>Distribution</span> of the <span>Largest</span> <span>Lengths</span> of <span>Fish</span>.”</span> <em>Asian Fisheries Science</em> 4 (2). <a href="https://doi.org/10.33997/j.afs.1991.4.2.001">https://doi.org/10.33997/j.afs.1991.4.2.001</a>.
 </div>
 </div></section></div></main>
 <!-- /main column -->
