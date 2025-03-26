@@ -1,4 +1,5 @@
 ---
+source---
 title: "Statistical methods for estimating the maximum body length of fish species" 
 format: 
   html: 
@@ -16,7 +17,10 @@ format:
     bibliography: references.bib 
 ---
 
-```{r packages}
+# Background
+
+```{r}
+#| label: pkg-installation
 library(tidyverse)
 library(evd)
 library(patchwork)
@@ -29,8 +33,6 @@ library(data.table)
 library(posterior)
 
 ```
-
-# Background
 
 Extreme Value Theory (EVT) is a branch of statistics that focuses on the extreme deviations from the median of probability distributions. Traditionally, EVT has been applied in fields such as hydrology, finance, and environmental sciences to model and predict rare events, such as floods, market crashes, and extreme weather conditions.
 
@@ -129,7 +131,7 @@ tibble(sample_number = 1:100) %>%
 
 ```
 
-Since there is variation in the sampling, we can run this multiple times, each with a new seed, to see how much variation there is.
+Since there is variation in the sampling, we can run this many times, each with a new seed, to see how much variation there is.
 
 ```{r gev-understanding-multiple}
 #| fig-cap: The distribution of 100 sample maxima, repeated 100 times. 
@@ -244,38 +246,38 @@ rnorm_maxima_10k %>%
 
 ```
 
+# Simulating data
+
+```{r}
+source("R/")
+```
+
 # Estimating maxima (EVT)
 
 The plots show that sample maxima can be well described by the GEV distribution. The following question from this, is how can we use the fitted GEV distribution to estimate the maximum of the underlying distribution.
 
-For this we will use a slightly more realistic example of the underlying 'true' population in relation to fish body lengths.
+For this we will use a slightly more realistic example of the underlying 'true' population in relation to fish body lengths.The underlying 'true' distribution of body lengths within a population will be defined by a normal distribution with a mean of 50 (cm) and a standard deviation of 16.67 (one third of 50 - see Heather et al, *in review*).
 
-The underlying 'true' distribution of body lengths within a population will be defined by a normal distribution with a mean of 50 (cm) and a standard deviation of 16 (approximately one third of 50 - see Heather et al, *in review*).
-
-We will take 10 samples each of length 1000 from the underlying population, to get 10 sample maxima to estimate the GEV distribution.
+We will take 10 samples each of mean length 2000 from the underlying population, to get 10 sample maxima to estimate the GEV distribution.
 
 ```{r}
-#| fig-cap: Estimating maximum length from 10 sample maxima. The sample maxima are calculated from samples of length 1000.
+#| fig-cap: Estimating maximum length from 10 sample maxima. The sample maxima are calculated from samples of mean length 2000.
 #| label: fig-estimate-lmax
 
-l_mean <- 50 # cm
-l_sd <- 16
-n_samples <- 10
-sample_size_mean <- 1000
+single_k = 10
+single_lambda = 2000
+single_mu = 50
 
-for (s in 1:n_samples) {
-    if (s == 1) {
-        sample_maxima <- c()
-        sample_sizes <- c()
-    }
-    set.seed(s)
-    sample_size <- round(rnorm(1, sample_size_mean, 300))
-    sample <- rnorm(sample_size, mean = l_mean, sd = l_sd)
-    sample_maxima[s] <- max(sample)
-    sample_sizes[s] <- sample_size
-}
+single_output <- 
+    sim_tbl_max %>% 
+    filter(k == single_k, n_lambda == single_lambda, mu == single_mu, rep == 1) %>% 
+    pull(maxima)  %>% 
+    .[[1]]
 
-gev_fit <- suppressWarnings(try(evd::fgev(x = sample_maxima),
+sample_maxima <- single_output$maxima
+sample_trueN <- single_output$n
+
+single_gevfit <- suppressWarnings(try(evd::fgev(x = sample_maxima),
     silent = TRUE
 ))
 
@@ -298,14 +300,14 @@ gev_fun <- function(model_fit, pc_or_q, type = c("qgev", "pgev"), se_factor = 0)
 }
 
 # chosing the percentile based on the number of samples
-q_pref <- n_samples / (n_samples + 1)
+q_pref <- single_k / (single_k + 1)
 
 p1 <-
     ggplot() +
     geom_textdensity(aes(x),
         data = tibble(x = rnorm(1e6,
-            mean = l_mean,
-            sd = l_sd
+            mean = single_mu,
+            sd = single_mu*0.34
         )) |> filter(x > 0),
         label = "Underlying body size distribution", hjust = 0.2
     ) +
@@ -315,15 +317,15 @@ p1 <-
     ) +
     geom_rect(
         aes(
-            xmin = gev_fun(gev_fit, q_pref, "qgev", -1),
-            xmax = gev_fun(gev_fit, q_pref, "qgev", 1),
+            xmin = gev_fun(single_gevfit, q_pref, "qgev", -1),
+            xmax = gev_fun(single_gevfit, q_pref, "qgev", 1),
             ymin = -Inf,
             ymax = Inf
         ),
         fill = "grey70",
         alpha = 0.3
     ) +
-    geom_textvline(aes(xintercept = gev_fun(gev_fit, q_pref, "qgev")),
+    geom_textvline(aes(xintercept = gev_fun(single_gevfit, q_pref, "qgev")),
         color = "orange",
         linetype = "dashed",
         label = "Estimated LMAX"
@@ -341,15 +343,15 @@ plot_data <-
         max = sample_maxima,
         rank = rank(sample_maxima),
         pos = rank / (max(rank) + 1),
-        n = sample_sizes
+        n = sample_trueN
     )
 
 p2 <-
     tibble(x = seq(p1_lims[1], p1_lims[2], by = 0.1)) %>%
     mutate(
-        pgev = gev_fun(gev_fit, x, "pgev"),
-        pgev_lwr = gev_fun(gev_fit, x, "pgev", -1),
-        pgev_upr = gev_fun(gev_fit, x, "pgev", 1)
+        pgev = gev_fun(single_gevfit, x, "pgev"),
+        pgev_lwr = gev_fun(single_gevfit, x, "pgev", -1),
+        pgev_upr = gev_fun(single_gevfit, x, "pgev", 1)
     ) |>
     ggplot() +
     geom_ribbon(aes(x = x, ymin = pgev_lwr, ymax = pgev_upr),
@@ -362,8 +364,8 @@ p2 <-
     geom_line(aes(x = x, y = pgev)) +
     geom_errorbarh(
         aes(
-            xmin = gev_fun(gev_fit, q_pref, "qgev", -1),
-            xmax = gev_fun(gev_fit, q_pref, "qgev", 1),
+            xmin = gev_fun(single_gevfit, q_pref, "qgev", -1),
+            xmax = gev_fun(single_gevfit, q_pref, "qgev", 1),
             y = q_pref
         ),
         height = 0.03,
@@ -372,7 +374,7 @@ p2 <-
         data = tibble(n = 1)
     ) +
     geom_vline(
-        xintercept = gev_fun(gev_fit, q_pref, "qgev"),
+        xintercept = gev_fun(single_gevfit, q_pref, "qgev"),
         col = "orange", lty = "dashed"
     ) +
     labs(
@@ -401,7 +403,7 @@ ggsave(
 
 ```
 
-In this simple case the estimated maximum length is determined by the sampling effort. The greater the sampling effort, the more likely you are to observe extreme length measures. It is therefore important to account for the sampling effort in the estimation to be clear as to what it is you are estimating. Using 10 sample maxima, each derived from a sample size of 1000, we observe the estimated LMAX to be between the 99.9th percentile and the 99.99th percentile. If we have larger sample sizes, it can be expected that this sample size increases.
+The greater the sampling effort, the more likely you are to observe extreme length measures. It is therefore important to account for the sampling effort in the estimation to be clear as to what it is you are estimating. Using 10 sample maxima, each derived from a mean sample size of 2000, we observe the estimated LMAX to be between the 99.9th percentile and the 99.99th percentile. If we have larger sample sizes, it can be expected that this sample size increases.
 
 We can see that increasing the size of the sample by 10-fold, increases the percentile being estimated by a similar 10-fold proportion (e.g. 99th to 99.9th percentile).
 
@@ -411,7 +413,7 @@ We can see that increasing the size of the sample by 10-fold, increases the perc
 
 if (!file.exists("output/simulated_data/sim_rnorm_fit_mu50_sd17.csv")) {
     l_mean <- 50 # cm
-    l_sd <- 16.67 # cm
+    l_sd <- l_mean*0.34 # cm
 
     fit_gev <- function(n_samples, sample_size, l_mean, l_sd) {
         # Generate samples and find the maxima
@@ -470,7 +472,7 @@ sim_rnorm_fit_mu50_sd17 |>
     filter(loc != 0) |>
     rowwise() |>
     mutate(lmax_est = qgev(ns / (ns + 1), loc = loc, scale = scale, shape = shape)) |>
-    filter(lmax_est < l_mean * 3) |>
+    filter(lmax_est < 50 * 3) |>
     ggplot() +
     aes(x = ss, y = lmax_est, col = as.factor(ns)) +
     geom_point() +
@@ -511,12 +513,12 @@ Using the original example of a mean of 50cm and a sd of 17cm.
 #| fig-cap: The estimated maximum length given 10, 100, or 1000 sampling efforts (e.g. fishing competitions), as indicated by the yellow, red, and blue vertical dashed lines respectively. 
 #| label: fig-number-efforts
  
-qgev_10comps <- gev_fun(gev_fit, 1-(1/10), "qgev")
-qgev_100comps <- gev_fun(gev_fit, 1-(1/100), "qgev")
-qgev_1000comps <- gev_fun(gev_fit, 1-(1/1000), "qgev")
+qgev_10comps <- gev_fun(single_gevfit, 1-(1/10), "qgev")
+qgev_100comps <- gev_fun(single_gevfit, 1-(1/100), "qgev")
+qgev_1000comps <- gev_fun(single_gevfit, 1-(1/1000), "qgev")
 
-tibble(x = seq(80, 120, by = 0.1)) %>% 
-  mutate(pgev = gev_fun(gev_fit, x, "pgev")) %>% 
+tibble(x = seq(80, 150, by = 0.1)) %>% 
+  mutate(pgev = gev_fun(single_gevfit, x, "pgev")) %>% 
   ggplot() +
   geom_point(aes(x = max, y = pos), color = "purple",
              plot_data) +
@@ -539,7 +541,7 @@ Using the evd package to fit our distribution means that we can extract the stan
 # a and b values from fishbase with highest R2 value
 # https://fishbase.se/popdyn/FishLWSummary.php?ID=6426&id2=43704&genusname=Pagrus&speciesname=auratus&fc=330&variable_Length=10&gm_a=0.03840258163471&gm_b=2.7759517453138
 
-kg2cm <- function(w, a = 0.01, b = 3) ((w * 1000) / a)^(1 / b) # basic formula
+# kg2cm <- function(w, a = 0.01, b = 3) ((w * 1000) / a)^(1 / b) # basic formula
 kg2cm <- function(w, a = 0.04478, b = 2.673) ((w * 1000) / a)^(1 / b)
 
 snapper_maxima <- tibble(
@@ -637,64 +639,6 @@ tibble(x = seq(min(snapper_maxima$max) * 0.8, max(snapper_maxima$max) * 1.3, by 
 # Numerical estimation of $L_{max}$
 
 ```{r}
-
-sim_pois_truncnorm <- function(k, n_lambda, mu, sigma, min_size) {
-    n <- rpois(k, lambda = n_lambda) # number of fish per competition
-    maxima <- numeric(k)
-    for (i in seq_len(k)) {
-        maxima[i] <- max(
-            truncnorm::rtruncnorm(
-                n = n[i],
-                a = min_size,
-                mean = mu,
-                sd = sigma
-            )
-        )
-    }
-    return(maxima)
-}
-
-
-# simulation over all scenarios
-sim_tbl <-
-    expand_grid(
-        rep = 1:10,
-        k = c(3, 5, 10, 20, 30, 100),
-        n_lambda = c(30, 50, 200, 2000, 10000),
-        mu = c(20, 50, 100),
-    ) |>
-    mutate(
-        sigma = mu * 0.34,
-        min_size = 10,
-        filename = paste0(
-            "rep", rep,
-            "_k", k,
-            "_lambda", n_lambda,
-            "_mu", mu
-        )
-    )
-if(!file.exists("output/simulated_data/sim_various_numerical.csv")){
-{
-    plan(multisession)
-    sim_tbl_max <-
-        sim_tbl %>%
-        mutate(maxima = future_pmap(
-            list(k, n_lambda, mu, sigma, min_size),
-            sim_pois_truncnorm,
-            .options = furrr_options(seed = TRUE)
-        ))
-    plan(sequential)
-}
-
-sim_tbl_max %>% 
-    unnest(cols = maxima) %>% 
-    fwrite("output/simulated_data/sim_various_numerical.csv")
-} else {
-    sim_tbl_max <- 
-    fread("output/simulated_data/sim_various_numerical.csv") %>% 
-    nest(.by = -maxima, .key = "maxima")
-}
-
 
 mod <- cmdstan_model("models/max_est.stan", stanc_options = list("O1"))
 
@@ -867,15 +811,17 @@ calculated_lmax %>%
     )
 
 
-ggsave("output/figures/estimated_vs_calculated_lmax.png", 
-width = 10, height = 7)
+ggsave("output/figures/estimated_vs_calculated_lmax.png",
+    width = 10, height = 7
         
 ```
 
 ## Numerical estimation - real data
 
 ```{r}
+
 mod <- cmdstan_model("models/max_est.stan", stanc_options = list("O1"))
+
 snapper_fit <- mod$sample(
     data = list(
         k = length(snapper_maxima$max),
@@ -893,8 +839,6 @@ snapper_fit_summary <-
     snapper_fit |>
     posterior::summarise_draws()
 
-library(posterior)
-
 snapper_fit %>%
     as_draws_df() %>%
     mutate(est_max = pmap_dbl(
@@ -909,8 +853,6 @@ snapper_fit %>%
         median_max = median(est_max),
         sd = sd(est_max)
     )
-
-find_max_x(26.62, 25.03, 480.01)
 
 snapper_fit %>%
     as_draws_df() %>%
@@ -968,6 +910,8 @@ ggsave("output/figures/snapper_numerical_est.png",
 
 ```
 
+# Comparing two methods
+
 ```{r}
 snapper_fit %>%
     as_draws_df() %>%
@@ -992,38 +936,9 @@ estimate_lmax_evt <- function(maxima, ngrid = 1000) {
         )
 }
 
-estimate_lmax_numerical <- function(maxima, ngrid = 1000, model) {
-    {
-        stan_code <-
-            "data {
-  int<lower=1> k;  // Number of competitions
-  vector[k] x;  // Recorded largest fish sizes
-}
+estimate_lmax_numerical <- function(maxima, ngrid = 1000, model_filename = "models/max_est.stan") {
 
-parameters {
-  real<lower=0> mu;    // Mean of the fish size distribution
-  real<lower=0> sigma; // Standard deviation
-  real<lower=1> lambda; // Estimated mean number of fish caught per competition
-}
-
-model {
-  // Priors
-  mu ~ normal(30, 20);
-  sigma ~ normal(10, 5);
-  lambda ~ gamma(50, 0.1);
-
-
-  target += k*log(lambda) - lambda*k;
-
-  for (i in 1:k) {
-  target += lambda*normal_cdf(x[i] | mu, sigma) + normal_lpdf(x[i]|mu, sigma);
-}
-}"
-    }
-    stan_file <- tempfile(fileext = ".stan")
-    writeLines(stan_code, stan_file)
-
-    mod <- cmdstan_model(stan_file, stanc_options = list("O1"))
+    mod <- cmdstan_model(model_filename, stanc_options = list("O1"))
     stan_model_fit <- mod$sample(
         data = list(
             k = length(maxima),
@@ -1110,277 +1025,34 @@ ggsave("output/figures/snapper_maxlength_estimation.png",
 
 ```
 
-
-
-
-
-
-
-
+# Chosing a percentile
 
 ```{r}
-calc_max <- function(x, n, mu, sigma) {
-    fx <- dnorm(x, mu, sigma)
-    Fx <- pnorm(x, mu, sigma)
-    max <- (n * (Fx^(n - 1))) * fx
-    return(max)
-}
-mu= 142
-sigma = 27
-n = 525
+snapper_fit
+snapper_gev_fit <- suppressWarnings(try(evd::fgev(x = snapper_maxima$max),
+    silent = TRUE
+))
 
-calc_max(200:250, lambda, mu, sigma)
-
-result <- optimize(calc_max, interval = c(mu - 5*sigma, mu + 5*sigma), 
-                   maximum = TRUE, n = n, mu = mu, sigma = sigma)
-
-calc_max(200, 142, 27, 526)
-xx <-
-    snapper_fit %>%
-    as_draws_df() %>%
-    as_tibble() %>%
-    select(-contains("max_")) %>% 
-    expand_grid(size = 0:150) %>%
-    mutate(max = calc_max(size, n = lambda, mu = mu, sigma = sigma)) 
-
-xx2 <-
-    snapper_fit %>%
-    as_draws_df() %>%
-    as_tibble() %>%
-    pivot_longer(contains("max_")) %>% 
-    mutate(size = as.numeric(str_extract(name, "\\d+"))) %>% 
-    select(-name)
-
-xx %>% 
-left_join(xx2)
-
-
-xx %>% 
-  arrange(desc(max))
-
-xx %>%
-    reframe(
-        max_fit = mean(max),
-        max_lwr = quantile(max, 0.025),
-        max_upr = quantile(max, 0.975),
-        .by = size
-    ) %>%
-    ggplot(aes(size, max_fit)) +
-    geom_ribbon(aes(ymin = max_lwr, ymax = max_upr),
-        fill = "grey70",
-        alpha = 0.8
-    ) +
-    geom_line() +
-    theme_classic(20) +
-    geom_rug(aes(x = maxima), data = tibble(maxima = snapper_maxima), 
-    col = "purple",
-    inherit.aes = FALSE) +
-    labs(x = "Body size", 
-    y = "Pr(size = max_size)")
-
-ggsave("estimated_max_posterior.png", 
-width = 10, height = 7)
 
 ```
 
 ```{r}
+library(ggplot2)
 
-expected_max <- function(n, mu, sigma, lower = 0, upper = Inf) {
-  integrand <- function(x) {
-    x * n * (pnorm(x, mu, sigma)^(n - 1)) * dnorm(x, mu, sigma)
-  }
-  integrate(integrand, lower, upper)$value
-}
-
-emax_tbl <- 
-  snapper_fit %>%
-    as_draws_df() %>%
-    as_tibble()  %>% 
-    mutate(emax = pmap_dbl(.l = list(mu = mu, sigma = sigma, n = lambda), 
-    .f = expected_max)) 
-
-emax_tbl %>% 
-reframe(median = median(emax), 
-q5 = quantile(emax, 0.025), 
-q95 = quantile(emax, 0.975))
-
-emax_tbl %>% 
-    ggplot(aes(x = emax)) +
-    geom_density() +
-    theme_classic(20) +
-    labs(x = "Expected maximum length")
-
-ggsave("expected_max_posterior.png", 
-width = 10, height = 7)
-
-```
-
-It is possible that the prior of the model is influencing the estimate of the maximum length. We can therefore try to change the prior on lambda to see how that influences the estimate of the est_max length.
-
-```{r}
-modify_lambda <- function(lambda_alpha, lambda_beta) {
-    paste0("
-data {
-  int<lower=1> k;  // Number of competitions
-  vector[k] x;  // Recorded largest fish sizes
-}
-
-parameters {
-  real<lower=0> mu;    // Mean of the fish size distribution
-  real<lower=0> sigma; // Standard deviation
-  real<lower=1> lambda;     // Estimated mean number of fish caught per competition
-}
-
-model {
-  // Priors
-  mu ~ normal(30, 20);
-  sigma ~ normal(10, 5);
-  lambda ~ gamma(", lambda_alpha, ",", lambda_beta, ");
-
-
-  target += k*log(lambda) - lambda*k;
-
-  for (i in 1:k) {
-
-  target += lambda*normal_cdf(x[i] | mu, sigma) + normal_lpdf(x[i]|mu, sigma);
-
-}
-}
-generated quantities {
-  real est_max;
-  est_max = mu + sigma * inv_Phi(1 - (1 / lambda));
-}
-")
-}
-
-lambda_sim_tbl <-
-    expand_grid(
-        lambda_alpha = c(0.5, 5, 50, 500),
-        gamma_mean = c(100, 1000, 10000, 100000)
-    ) %>%
-    mutate(lambda_beta = lambda_alpha / gamma_mean)
-
-run_stan_model <- function(lambda_alpha, lambda_beta) {
-    stan_file <- tempfile(fileext = ".stan")
-    writeLines(modify_lambda(lambda_alpha, lambda_beta), stan_file)
-
-    mod <- cmdstan_model(stan_file, stanc_options = list("O1"))
-
-    fit <- mod$sample(
-        data = list(
-            k = length(snapper_maxima),
-            x = snapper_maxima
-        ),
-        iter_warmup = 1000,
-        iter_sampling = 2000,
-        chains = 4,
-        parallel_chains = 4,
-        refresh = 500,
-        save_warmup = TRUE
-    )
-
-    out1 <-
-        fit |>
-        posterior::summarise_draws() |>
-        mutate(
-            lambda_alpha = lambda_alpha,
-            lambda_beta = lambda_beta
-        )
-    return(out1)
-}
-if (!file.exists("snapper_fit_lambda.csv")) {
-    plan(multicore)
-    output <-
-        lambda_sim_tbl %>%
-        mutate(fit_summary = future_pmap(
-            .l = list(
-                lambda_alpha = lambda_alpha,
-                lambda_beta = lambda_beta
-            ),
-            .f = run_stan_model,
-            .options = furrr_options(seed = TRUE),
-            .progress = TRUE
-        ))
-    plan(sequential)
-
-    output %>%
-        select(fit_summary) %>%
-        unnest(cols = c(fit_summary)) %>%
-        write_csv("snapper_fit_lambda.csv")
-}
-
-lambda_output <- read_csv("snapper_fit_lambda.csv")
-
-```
-
-```{r}
-
-lambda_output %>% 
-  filter(variable == "est_max") %>% 
-  mutate(gamma_mean = lambda_alpha / lambda_beta) %>% 
-  ggplot(aes(x = gamma_mean, y = median)) +
-  geom_point(size = 4) +  
-  geom_errorbar(aes(ymin = q5, ymax = q95), width = 0.5) +  
-  labs(
-    x = "Mean of gamma prior on lambda (i.e., sample size in each comp.)",
-    y = "Estimated maximum length (model output)"
-  ) +
-  theme_minimal(base_size = 14)
-
-
-ggsave("lambda_prior_estmax_snapper.png", 
-height = 5, 
-width = 5*1.6)
-
-```
-
-Is the estimated maximum always lower than the maxima values that are put into it?
-
-```{r}
-
-custom_labeller <- function(labels) {
-  paste0(labels, " competitions (# maxima)")
-}
-
-sim_output %>%
-filter(!str_detect(variable, "max_vals")) %>% 
-    select(filename, variable, median) %>%
-    pivot_wider(
-        names_from = variable,
-        values_from = median,
-        names_prefix = "est_"
-    ) %>%
-    left_join(sim_tbl_max) %>%
- mutate(calc_max = pmap_dbl(
-        .l = list(
-            mu = mu,
-            sigma = sigma,
-            n = n_lambda
-        ),
-        .f = find_max_x
-    ))  %>% 
-     mutate(est_max = pmap_dbl(
-        .l = list(
-            mu = est_mu,
-            sigma = est_sigma,
-            n = est_lambda
-        ),
-        .f = find_max_x
-    ))  %>%
-    select(maxima, est_max, filename, mu, n_lambda, k) %>%
-    unnest(cols = c(maxima)) %>%
-    ggplot(aes(maxima, est_max, col = as.factor(n_lambda), pch = as.factor(mu))) +
-    geom_point(alpha = 0.3) +
-    geom_abline(slope = 1, col = "red") +
-    facet_wrap(~k, ncol = 2, labeller = as_labeller(custom_labeller)) +
-    labs(x = "Maxima values (data input)", 
-    y = "Estimated maximum (model output)", 
-    shape = "True Mu value (pop. mean body-length)",  
-    color = "True lambda value (# samples in comp.)") +
-    theme(legend.position = "bottom", legend.box = "vertical")
-
-ggsave("maxima_vs_estmax.png",
-    height = 10,
-    width = 6
+# Create a sample data frame
+data <- data.frame(
+  x = rnorm(100),
+  y = rnorm(100)
 )
+
+# Create a scatter plot
+ggplot(data, aes(x = x, y = y)) +
+  geom_point() +
+  labs(
+    title = "Scatter Plot",
+    x = "X-axis Label",
+    y = "Y-axis Label"
+  ) +
+  theme_minimal() + 
+  
 ```

@@ -1,0 +1,231 @@
+---
+title: "Understanding extreme value theory" 
+format: 
+  html: 
+    theme: minty 
+    editor: visual 
+    execute: 
+    echo: false 
+    warning: false 
+    error: false 
+    message: false 
+    cache: true
+    fig-width: 8
+    fig-asp: 0.65
+    fig-align: center
+    bibliography: references.bib 
+---
+
+# Background
+
+Extreme Value Theory (EVT) is a branch of statistics that focuses on the extreme deviations from the median of probability distributions. Traditionally, EVT has been applied in fields such as hydrology, finance, and environmental sciences to model and predict rare events, such as floods, market crashes, and extreme weather conditions.
+
+In this analysis, we extend the application of EVT to estimate the maximum lengths of fish species. While previous studies, such as @formacion_extreme_1991, have utilized the Gumbel distribution for this purpose, we aim to incorporate the broader Extreme Value Distribution (EVD) framework. This approach allows for a more comprehensive analysis by considering different types of extreme value distributions, including the Gumbel, Fréchet, and Weibull distributions.
+
+The Generalized Extreme Value (GEV) distribution is defined as:
+
+$$
+G(x; \mu, \sigma, \xi) = exp(-[1 + \xi(\frac{x-\mu}{\sigma})]^{-1/\xi})
+$$
+
+where:
+
+$\mu$ is the location parameter, $\sigma$ is the scale parameter, $\xi$ is the shape parameter.
+
+By applying the GEV distribution, we can better estimate the maximum lengths of fish species, providing valuable insights for ecological and biological studies.
+
+The Gumbel distribution is a simplified variation of the GEV distribution where $\xi = 0$.
+
+# Understanding GEV
+
+## Shape of GEV
+
+The shape of the GEV distribution is defined by the shape ($\xi$) parameter. Below, location ($\mu$) is fixed at zero, and scale ($\sigma$) is fixed at one.
+
+```{r gev-background}
+#| fig-cap: Varying the shape parameter of the Generalised Extreme Value (GEV) distribution. The location and scale parameters are fixed at 0 and 1, respectively.
+#| label: fig-GEVshape
+
+
+tibble(x = seq(-4, 4, by = 0.001)) %>% 
+  mutate(shape_0 = dgev(x = x, loc=0, scale=1, shape=0),
+         shape_neghalf = dgev(x = x, loc=0, scale=1, shape=-0.5),
+         shape_half = dgev(x = x, loc=0, scale=1, shape=0.5)) %>% 
+  pivot_longer(cols = contains("shape_")) %>% 
+  dplyr::filter(value > 0) %>% 
+  ggplot() +
+  aes(x = x, y = value, col = name) +
+  geom_path(linewidth = 2) +
+  labs(x = "x", 
+       y = "Density", 
+       col = element_blank()) +
+  scale_color_discrete(label = c(shape_0 = expression(paste(~xi, " = 0")),
+                                 shape_half = expression(paste(~xi, " = 1/2")),
+                                 shape_neghalf = expression(paste(~xi, " = -1/2")))) +
+  theme_classic(20) +
+  theme(legend.position = "inside",
+        legend.position.inside = c(1,1), 
+        legend.justification = c(1,1))
+
+
+```
+
+## Simulation of maxima
+
+We can test the GEV distribution with simulated data.
+
+If we take a normal distribution with a mean of 0 and standard deviation of 1, and take a sample of length 1000, and calculate the maximum of this.
+
+```{r norm-max}
+#| fig-cap: A sample of length 1000 from a normal distribution with a mean of 0 and standard deviation of 1. The sampled values are indicated as the vertical lines along the x-axis, the maximum of this sample is indicated in red.
+#| label: fig-dnorm
+
+sample1000 <- tibble(x = rnorm(1000, mean = 0, sd = 1))
+
+tibble(x = seq(-3.5, 3.5, by = 0.01)) |> 
+  mutate(y = dnorm(x, mean = 0, sd = 1)) |> 
+  ggplot(aes(x, y)) +
+  geom_line() +
+  geom_rug(y = 1, 
+           data = sample1000 |> filter(x == max(x)), 
+           col = "red", linewidth = 2, alpha = 0.8) +
+  geom_rug(y = 1, data = sample1000) +
+  labs(x = "x", 
+       y = "Density") +
+  theme_classic(20)
+
+```
+
+Given 100 samples, each of length 1000, from a normal distribution ($\mu$ = 0, $\sigma$ = 1), we take the maxima of those 100 samples and look at the distribution of those 100 maxima. According to theory, they should follow the GEV distribution.
+
+```{r gev-understanding}
+#| fig-cap: The distribution of 100 sample maxima, that are derived from 100 samples of length 1000 from a normal distribution with a mean and standard deviation of 0 and 1, respectively.
+#| label: fig-maxima-distribution
+
+tibble(sample_number = 1:100) %>%
+  expand_grid(sample_id = 1:1000) %>% 
+  mutate(x = rnorm(n = 100*1000)) %>% 
+  summarise(sample_maxima = max(x), 
+            .by = sample_number) %>% 
+  ggplot(aes(x = sample_maxima)) +
+  geom_density() +
+  labs(x = "Sample maximum", 
+       y = "Density") +
+  theme_classic(20)
+
+```
+
+Since there is variation in the sampling, we can run this many times, each with a new seed, to see how much variation there is.
+
+```{r gev-understanding-multiple}
+#| fig-cap: The distribution of 100 sample maxima, repeated 100 times. 
+#| label: fig-maxima-distribution-multiple
+
+if(!file.exists("output/simulated_data/rnorm_maxima_10k.csv")){
+  for(seed in 1:100){
+  
+  if(seed == 1) out_tbl <- tibble()
+  
+  set.seed(seed)
+  
+  tab <- 
+    tibble(sample_number = 1:100) %>%
+    expand_grid(sample_id = 1:1000) %>% 
+    mutate(x = rnorm(n = 100*1000)) %>% 
+    summarise(sample_maxima = max(x), 
+              .by = sample_number) %>% 
+    mutate(seed = seed)
+  
+  out_tbl <- 
+  bind_rows(
+      out_tbl, 
+      tab
+    )  
+  } 
+  write_csv(out_tbl, "output/simulated_data/rnorm_maxima_10k.csv")
+} else {
+  rnorm_maxima_10k <- read_csv("output/simulated_data/rnorm_maxima_10k.csv")
+}
+
+rnorm_maxima_10k %>% 
+  ggplot(aes(x = sample_maxima, 
+             group = seed)) +
+  geom_density(colour=alpha("red", 0.3)) +
+  labs(x = "Sample maximum", 
+       y = "Density") +
+  theme_classic(20)
+
+```
+
+## Fitting GEV to simulated maxima
+
+```{r}
+#| fig-cap: Fitting 100 GEV distributions to 100 repeats, each of length 100 sample maxima. 
+#| label: fig-GEVfitting-multiple
+
+gev_fits <- 
+  rnorm_maxima_10k %>% 
+  nest(.by = seed) %>% 
+  mutate(gev_fit = map(.x = data, 
+                       .f = ~evd::fgev(.x$sample_maxima)), 
+         loc = map_dbl(.x = gev_fit,
+                       .f = ~.x$estimate["loc"]),
+         scale = map_dbl(.x = gev_fit,
+                         .f = ~.x$estimate["scale"]),
+         shape = map_dbl(.x = gev_fit,
+                         .f = ~.x$estimate["shape"])) 
+
+median_gev_fits <-
+  gev_fits %>% 
+  summarise(med_loc = median(loc), 
+            med_scale = median(scale), 
+            med_shape = median(shape))
+
+
+median_gev_ests <- 
+  tibble(x = seq(min(rnorm_maxima_10k$sample_maxima), 
+                 max(rnorm_maxima_10k$sample_maxima), 
+                 by = 0.001), 
+         y = dgev(x = x, 
+                  loc = median_gev_fits$med_loc, 
+                  scale = median_gev_fits$med_scale,
+                  shape = median_gev_fits$med_shape))
+
+ci_gev_ests <- 
+  gev_fits %>% 
+  select(seed, loc, scale, shape) %>% 
+  expand_grid(x = seq(min(rnorm_maxima_10k$sample_maxima), 
+                      max(rnorm_maxima_10k$sample_maxima), 
+                      by = 0.001)) %>% 
+  rowwise() %>%
+  mutate(y = dgev(x = x, 
+                  loc = loc, 
+                  scale = scale,
+                  shape = shape)) %>% 
+  ungroup() %>% 
+  summarise(
+    median = quantile(y, p = 0.5),
+    lower = quantile(y, p = 0.025),
+    upper = quantile(y, p = 0.975), 
+    .by = x
+  )
+
+rnorm_maxima_10k %>% 
+  ggplot(aes(x = sample_maxima, 
+             group = seed)) +
+  geom_density(colour=alpha("red", 0.3)) +
+  
+  geom_ribbon(inherit.aes = FALSE, 
+              aes(x = x, ymax = upper, ymin = lower), 
+              data = ci_gev_ests, 
+              linewidth = 1, 
+              alpha = 0.3) +
+  geom_line(inherit.aes = FALSE, 
+            aes(x = x, y = median), 
+            data = ci_gev_ests, 
+            linewidth = 1) +
+  labs(x = "Sample maximum", 
+       y = "Density") +
+  theme_classic(20)
+
+```

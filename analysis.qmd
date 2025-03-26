@@ -1,0 +1,716 @@
+---
+title: "Statistical methods for estimating the maximum body length of fish species" 
+format: 
+  html: 
+    theme: minty 
+    editor: visual 
+    execute: 
+    echo: false 
+    warning: false 
+    error: false 
+    message: false 
+    cache: true
+    fig-width: 8
+    fig-asp: 0.65
+    fig-align: center
+    bibliography: references.bib 
+---
+
+```{r}
+
+# install.packages("pacman")
+pacman::p_load(
+    tidyverse, 
+    furrr, 
+    data.table, 
+    truncnorm,
+    evd,
+    scales,
+    geomtextpath,
+    multidplyr,
+    parallel,
+    cmdstanr,
+    patchwork,
+    posterior
+    )
+
+source("R/01_simulation.R")
+source("R/02_functions.R")
+source("R/04_evt_analysis.R")
+source("R/05_numerical.R")
+
+
+save_figures <- FALSE
+```
+
+# Concept
+
+```{r}
+set.seed(1)
+underlying_dist <- rtruncnorm(n = 10000, a = 0, mean = 50, sd = 16)
+
+sample_gev <- function(sample_size) {
+    maxima <- replicate(20, {
+        sample <- sample(underlying_dist, sample_size)
+        max(sample)
+    })
+
+    gev_fit <- fgev(maxima)
+    gev_sample <- rgev(10000,
+        loc = gev_fit$estimate["loc"], scale = gev_fit$estimate["scale"], shape = gev_fit$estimate["shape"]
+    )
+    return(gev_sample)
+}
+
+p_concept <-
+    ggplot() +
+    geom_density(aes(x = underlying_dist), fill = "blue", alpha = 0.7, col = "blue") +
+    geom_density(aes(x = sample_gev(sample_size = 100)), fill = "transparent", alpha = 0.4, col = "red", lty = 2, linewidth = 1.5) +
+    geom_density(aes(x = sample_gev(sample_size = 1000)), fill = "transparent", alpha = 0.4, col = "darkred", lty = 2, linewidth = 1.5) +
+    labs(
+        x = "Body length",
+        y = "Probability density"
+    ) +
+    scale_x_continuous(label = scales::label_number(suffix = "cm"), limits = c(0, 125)) +
+    theme_classic(20) +
+    theme(
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank()
+    ) +
+    annotate("text",
+        x = 0, y = 0.05,
+        label = "Underlying distribution",
+        color = "blue",
+        size = 7,
+        hjust = 0
+    ) +
+    annotate("text",
+        x = 0, y = 0.045,
+        label = expression(L[max] ~ "based on 100 samples"),
+        color = "red", size = 7, hjust = 0
+    ) +
+    annotate("text",
+        x = 0, y = 0.04,
+        label = expression(L[max] ~ "based on 1000 samples"),
+        color = "darkred", size = 7, hjust = 0
+    )
+
+
+ggsave(
+    filename = "output/figures/p_concept.png",
+    plot = p_concept,
+    height = 8,
+    width = 8 * 1.6
+)
+
+```
+
+# Simulation
+
+```{r}
+if (!file.exists("output/simulated_data/simulation_scenarios.csv")) {
+scenarios <-
+    expand_grid(
+        rep = 1:100,
+        k = c(3, 5, 10, 20, 30, 100),
+        n_lambda = c(30, 50, 200, 2000, 10000),
+        mu = c(20, 50, 100),
+    ) |>
+    mutate(
+        sigma = mu * 0.34,
+        min_size = 10,
+        filename = paste0(
+            "rep", rep,
+            "_k", k,
+            "_lambda", n_lambda,
+            "_mu", mu
+        )
+    ) |>
+    est_sim_max()
+
+    if (!dir.exists("output/simulated_data/")) dir.create("output/simulated_data/")
+
+    scenarios %>%
+        tidyr::unnest(cols = maxima) %>%
+        data.table::fwrite("output/simulated_data/simulation_scenarios.csv")
+} else {
+scenarios <- 
+    data.table::fread("output/simulated_data/simulation_scenarios.csv") %>% 
+    nest(.by =-c(maxima, n), .key = "maxima")
+}
+
+
+
+```
+
+# Single scenario
+
+## Single simulation example
+
+```{r}
+
+single_k <- 10
+single_lambda <- 2000
+single_mu <- 50
+single_sigma <- single_mu*0.34
+
+scenario1 <-
+    scenarios %>%
+    filter(k == single_k, n_lambda == single_lambda, mu == single_mu, rep == 1) %>%
+    pull(maxima) %>%
+    .[[1]]
+
+scenario1_maxima <- scenario1$maxima
+scenario1_n <- scenario1$n
+
+# expected maximum based on 100 samples, each of length 2000
+# total is 100*2000 samples
+scenario1_max100 <- expected_max(n = 100*single_lambda, mu = single_mu, sigma = single_sigma)
+
+```
+
+## EVT (single)
+
+```{r}
+# the EVT fit
+scenario1_evt_fit <- evd::fgev(x = scenario1_maxima)
+
+# parameters
+scenario1_gev_loc <- scenario1_evt_fit$estimate["loc"]
+scenario1_gev_scale <- scenario1_evt_fit$estimate["scale"]
+scenario1_gev_shape <- scenario1_evt_fit$estimate["shape"]
+scenario1_gev_loc_se <- scenario1_evt_fit$std.err["loc"]
+scenario1_gev_scale_se <- scenario1_evt_fit$std.err["scale"]
+scenario1_gev_shape_se <- scenario1_evt_fit$std.err["shape"]
+
+scenario1_gev_preds <-
+    tibble(size = 0:150) %>%
+    mutate(
+        p_fit = pmap_dbl(
+            .l =
+                list(
+                    q = size,
+                    loc = scenario1_gev_loc,
+                    scale = scenario1_gev_scale,
+                    shape = scenario1_gev_shape
+                ),
+            .f = pgev
+        ),
+        p_lwr = pmap_dbl(
+            .l =
+                list(
+                    q = size,
+                    loc = scenario1_gev_loc - scenario1_gev_loc_se,
+                    scale = scenario1_gev_scale - scenario1_gev_scale_se,
+                    shape = scenario1_gev_shape - scenario1_gev_shape_se
+                ),
+            .f = pgev
+        ),
+        p_upr = pmap_dbl(
+            .l =
+                list(
+                    q = size,
+                    loc = scenario1_gev_loc + scenario1_gev_loc_se,
+                    scale = scenario1_gev_scale + scenario1_gev_scale_se,
+                    shape = scenario1_gev_shape + scenario1_gev_shape_se
+                ),
+            .f = pgev
+        ),
+    )
+# Calculate expected maximum for k=100 samples
+max_k100_fit <- gev_exp_max(
+    k = 100,
+    loc = scenario1_gev_loc,
+    scale = scenario1_gev_scale,
+    shape = scenario1_gev_shape
+)
+
+max_k100_lwr <- gev_exp_max(
+    k = 100,
+    loc = scenario1_gev_loc - scenario1_gev_loc_se,
+    scale = scenario1_gev_scale - scenario1_gev_scale_se,
+    shape = scenario1_gev_shape - scenario1_gev_shape_se
+)
+max_k100_upr <- gev_exp_max(
+    k = 100,
+    loc = scenario1_gev_loc + scenario1_gev_loc_se,
+    scale = scenario1_gev_scale + scenario1_gev_scale_se,
+    shape = scenario1_gev_shape + scenario1_gev_shape_se
+)
+```
+
+## Numerical (single)
+
+```{r}
+
+scenario1_nem_fit <- fit_mod(scenario1_maxima)
+
+scenario1_nem_preds <- 
+    scenario1_nem_fit %>%
+    posterior::as_draws_df() %>%
+    as_tibble() %>%
+    select(mu, sigma, lambda, .draw, .iteration, .chain) %>%
+    expand_grid(size = 0:150) %>%
+    mutate(cdf = F_n_x(x = size, n = lambda, mu = mu, sigma = sigma)) %>% 
+    summarise(
+        p_fit = mean(cdf),
+        p_lwr = quantile(cdf, 0.025),
+        p_upr = quantile(cdf, 0.975),
+        .by = size
+    )
+
+scenario1_nem_max_posterior <- 
+    scenario1_nem_fit %>%
+    posterior::as_draws_df() %>%
+    as_tibble() %>%
+    mutate(max100 = pmap_dbl(
+        .l = list(
+            n = 100*lambda, 
+            mu = mu, 
+            sigma = sigma
+        ), 
+        .f = expected_max
+    )) %>% pull(max100)
+
+
+nem_p_fit <- median(scenario1_nem_max_posterior)
+nem_p_lwr <- quantile(scenario1_nem_max_posterior, 0.025)
+nem_p_upr <- quantile(scenario1_nem_max_posterior, 0.975)
+
+```
+
+## Plotting single scenario
+
+```{r}
+
+p_single_underlying <-
+    ggplot() +
+    geom_textdensity(aes(x), data = tibble(x = rtruncnorm(1e6, a = 0, mean = single_mu, sd = single_sigma)), 
+                     label = "Observable body size distribution", 
+                     hjust = 0.6) +
+    geom_rug(aes(x = scenario1_maxima), color = "purple", length = unit(0.5, units = "cm")) +
+geom_point(aes(x = scenario1_max100, y = 0), size = 4) +
+    geom_rect(aes(
+        xmin = max_k100_lwr,
+        xmax = max_k100_upr, ymin = -Inf, ymax = Inf
+    ), fill = "orange", alpha = 0.3) +
+ geom_rect(aes(
+        xmin = nem_p_lwr,
+        xmax = nem_p_upr, ymin = -Inf, ymax = Inf
+    ), fill = "pink", alpha = 0.3) +
+    geom_textvline(aes(xintercept = nem_p_fit),
+        color = "#f66b6b", linetype = "dashed",
+        label = as.character(expression(L[paste(max, ", ", 100)])),
+        parse = TRUE, size = 5
+    ) +
+    geom_textvline(aes(xintercept = max_k100_fit),
+        color = "orange", linetype = "dashed",
+        label = as.character(expression(L[paste(max, ", ", 100)])),
+        parse = TRUE, size = 5
+    ) +
+    labs(x = "Fish body length (cm)", y = NULL) +
+    theme_minimal(20) +
+    theme(axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()) +
+    scale_x_continuous(breaks=seq(40,150,20), expand = c(0,1)) +
+    coord_cartesian(xlim = c(40, 150))
+
+
+p1_lims <- layer_scales(p_single_underlying)$x$range$range
+
+scenario1_plotting <-
+    scenario1 %>%
+    mutate(plotting_pos = rank(maxima) / (max(rank(maxima)) + 1))
+
+p_single_evt <-
+    scenario1_gev_preds %>%
+    ggplot() +
+    geom_ribbon(aes(x = size, ymin = p_lwr, ymax = p_upr), fill = "orange", alpha = 0.3) +
+    geom_point(aes(x = maxima, y = plotting_pos, size = n), data = scenario1_plotting, color = "purple") +
+    geom_line(aes(x = size, y = p_fit), col = "orange", linewidth = 1.5) +
+    geom_errorbarh(aes(xmin = max_k100_lwr, xmax = max_k100_upr, y = 0.99), height = 0.03, col = "black", lty = "solid", data = tibble(n = 1)) +
+    geom_vline(xintercept = max_k100_fit, col = "orange", lty = "dashed") +
+    labs(x = "Fish body length (cm)", y = "Pr(Lmax < size)", size = "Sample size") +
+    theme_minimal(20) +
+    theme(legend.position = "inside", legend.position.inside = c(0.05, 1), legend.justification = c(0, 1.2), legend.background = element_rect(fill = "white", color = "black")) +
+    scale_x_continuous(breaks=seq(40,150,20), expand = c(0,1)) +
+    coord_cartesian(xlim = c(40, 150))
+
+p_single_nem <-
+    scenario1_nem_preds %>%
+    ggplot() +
+    geom_ribbon(aes(x = size, ymin = p_lwr, ymax = p_upr), fill = "pink", alpha = 0.3) +
+    geom_point(aes(x = maxima, y = plotting_pos, size = n), data = scenario1_plotting, color = "purple") +
+    geom_line(aes(x = size, y = p_fit), col = "pink", linewidth = 1.5) +
+    geom_errorbarh(aes(xmin = nem_p_lwr, xmax = nem_p_upr, y = 0.99), height = 0.03, col = "black", lty = "solid", data = tibble(n = 1)) +
+    geom_vline(xintercept = nem_p_fit, col = "pink", lty = "dashed") +
+    labs(x = "Fish body length (cm)", y = "Lmax < size", size = "Sample size") +
+    theme_minimal(20) +
+    theme(legend.position = "inside", legend.position.inside = c(0.05, 1), legend.justification = c(0, 1.2), legend.background = element_rect(fill = "white", color = "black"))+
+    scale_x_continuous(breaks=seq(40,150,20), expand = c(0,1)) +
+    coord_cartesian(xlim = c(40, 150))
+
+p_examplefit <-
+    p_single_underlying +
+    p_single_evt +
+    p_single_nem +
+    plot_layout(ncol = 1, axis_titles = "collect") +
+    plot_annotation(tag_levels = "A")
+
+if(save_figures){
+   ggsave(
+    filename = "output/figures/p_examplefit.png",
+    plot = p_examplefit,
+    height = 12,
+    width = 10
+) 
+}
+
+
+```
+
+# Sensitivity analysis
+
+## 'True' values
+
+```{r}
+
+scenarios_truemax <-
+    scenarios %>%
+    mutate(true_max = pmap_dbl(.l = list(n = k*n_lambda, mu=mu, sigma=sigma), 
+    .f = expected_max), 
+    true_max100 = pmap_dbl(.l = list(n = 100*n_lambda, mu=mu, sigma=sigma), 
+    .f = expected_max))
+    
+```
+
+
+## GEV (mulitple)
+
+```{r}
+
+if (!file.exists("output/simulated_data/simulation_gev_results.csv")) {
+
+    plan(multisession)
+    sim_gev <-
+        scenarios |>
+        mutate(maxvals = map(maxima, ~ .x$maxima)) %>% 
+        mutate(out = future_pmap(
+            .l = list(maxima = maxvals),
+            .f = fit_gev
+        )) |>
+        unnest(cols = out) %>%
+    select(filename, k, loc, scale, shape) %>% 
+    drop_na() %>% 
+    mutate(gev_max = future_pmap_dbl(
+        .l = list(
+            loc = loc,
+            scale = scale,
+            shape = shape, 
+            k = k
+        ),
+        .f = gev_exp_max
+    )) 
+    plan(sequential)
+
+    write_csv(sim_gev, "output/simulated_data/simulation_gev_results.csv")
+} else {
+    sim_gev <- read_csv("output/simulated_data/simulation_gev_results.csv")
+}
+
+```
+
+```{r}
+
+sim_gev_maxest <-
+    sim_gev %>%
+    select(filename, k, loc, scale, shape) %>% 
+    drop_na() %>% 
+    mutate(
+        gev_max = pmap_dbl(
+        .l = list(
+            loc = loc,
+            scale = scale,
+            shape = shape, 
+            k = k
+        ),
+        .f = gev_exp_max
+    ),
+    gev_max100 = pmap_dbl(
+        .l = list(
+            loc = loc,
+            scale = scale,
+            shape = shape, 
+            k = 100
+        ),
+        .f = gev_exp_max
+    )) 
+
+```
+
+
+## NEM (multiple)
+
+```{r}
+
+run_scenarios()
+
+nem_output <- vroom::vroom("output/data/stan_output (2).csv")
+
+nem_est_max <-
+    nem_output |>
+    select(filename, variable, median) %>%
+    pivot_wider(
+        names_from = variable,
+        values_from = median,
+        names_prefix = "est_"
+    ) %>%
+    mutate(k = as.numeric(str_extract(filename, "(?<=_k)\\d+"))) %>% 
+    mutate(nem_max = pmap_dbl(
+        .l = list(
+            mu = est_mu,
+            sigma = est_sigma,
+            n = k*est_lambda
+        ),
+        .f = expected_max
+    ),
+    nem_max100 = pmap_dbl(
+        .l = list(
+            mu = est_mu,
+            sigma = est_sigma,
+            n = 100*est_lambda
+        ),
+        .f = expected_max
+    )) %>%
+    select(filename, nem_max, nem_max100)
+
+```
+
+## Plotting multiple fits
+
+```{r}
+
+p_simulation_bias <- 
+    scenarios_truemax %>% 
+        left_join(nem_est_max) %>% 
+        left_join(sim_gev_maxest %>% select(filename, gev_max)) %>% 
+        pivot_longer(cols = c(nem_max, gev_max)) %>% 
+    ggplot(aes(value, true_max, col = as.factor(k))) +
+    geom_point() +
+    geom_abline(slope = 1) +
+    facet_grid(n_lambda ~ name, scales = "free", 
+               labeller = labeller(
+                   name = c(gev_max = "Extreme value theory", nem_max = "Numerical estimation"),
+                   n_lambda = function(x) paste0("n = ", x)
+               )) +
+    theme_minimal(20) +
+    theme(
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 1), 
+        legend.position = "bottom",
+        legend.direction = "horizontal" 
+    ) +
+    guides(color = guide_legend(override.aes = list(size = 5), nrow = 1)) + 
+    labs(
+        x = expression("Estimated "~L[max]~ "(cm)"),
+        y = expression("True " ~ L[max]~ "(cm)"),
+        color = "# samples (k):"
+    ) 
+
+ggsave(
+    filename = "output/figures/p_simulation_bias.png",
+    plot = p_simulation_bias,
+    height = 10,
+    width = 7
+)
+```
+
+Alternative plotting using errorbars
+
+```{r}
+
+p_simulation_bias_errorbars <- 
+    scenarios_truemax %>% 
+        left_join(nem_est_max) %>% 
+        left_join(sim_gev_maxest %>% select(filename, gev_max)) %>% 
+        pivot_longer(cols = c(nem_max, gev_max)) %>% 
+        drop_na() %>% 
+        summarise(value_med = median(value), 
+        value_sd = sd(value), 
+        n = n(), 
+        .by = c(k, n_lambda, name, true_max)) %>% 
+        mutate(se = value_sd/sqrt(n)) %>% 
+    ggplot(aes(value_med, true_max, col = as.factor(k))) +
+    geom_errorbarh(aes(xmin = value_med-(1.96*value_sd), xmax = value_med+(1.96*value_sd))) +
+    geom_point() +
+    geom_abline(slope = 1) +
+    facet_grid(n_lambda ~ name, scales = "free", 
+               labeller = labeller(
+                   name = c(gev_max = "Extreme value theory", nem_max = "Numerical estimation"),
+                   n_lambda = function(x) paste0("n = ", x)
+               )) +
+    theme_minimal(20) +
+    theme(
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 1), 
+        legend.position = "bottom",
+        legend.direction = "horizontal" 
+    ) +
+    guides(color = guide_legend(override.aes = list(size = 5), nrow = 1)) + 
+    labs(
+        x = expression("Estimated "~L[max]~ "(cm)"),
+        y = expression("True " ~ L[max]~ "(cm)"),
+        color = "# samples (k):"
+    ) 
+
+ggsave(
+    filename = "output/figures/p_simulation_bias_errorbars.png",
+    plot = p_simulation_bias_errorbars,
+    height = 10,
+    width = 7
+)
+```
+
+
+
+```{r}
+
+p_simulation_bias_errorbars_k100 <- 
+    scenarios_truemax %>% 
+        left_join(nem_est_max) %>% 
+        left_join(sim_gev_maxest %>% select(filename, gev_max, gev_max100)) %>% 
+        pivot_longer(cols = c(nem_max100, gev_max100)) %>% 
+        drop_na() %>% 
+        summarise(value_med = median(value), 
+        value_sd = sd(value), 
+        n = n(), 
+        .by = c(k, n_lambda, name, true_max100)) %>% 
+        mutate(se = value_sd/sqrt(n)) %>% 
+    ggplot(aes(value_med, true_max100, col = as.factor(k))) +
+    geom_errorbarh(aes(xmin = value_med-(1.96*value_sd), xmax = value_med+(1.96*value_sd))) +
+    geom_point() +
+    geom_abline(slope = 1) +
+    facet_grid(n_lambda ~ name, scales = "free", 
+               labeller = labeller(
+                   name = c(gev_max = "Extreme value theory", nem_max = "Numerical estimation"),
+                   n_lambda = function(x) paste0("n = ", x)
+               )) +
+    theme_minimal(20) +
+    theme(
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 1), 
+        legend.position = "bottom",
+        legend.direction = "horizontal" 
+    ) +
+    guides(color = guide_legend(override.aes = list(size = 5), nrow = 1)) + 
+    labs(
+        x = expression("Estimated "~L["max, 100"]~ "(cm)"),
+        y = expression("True " ~ L["max, 100"]~ "(cm)"),
+        color = "# samples (k):"
+    ) 
+
+ggsave(
+    filename = "output/figures/p_simulation_bias_errorbars_k100.png",
+    plot = p_simulation_bias_errorbars_k100,
+    height = 10,
+    width = 7
+)
+```
+
+
+## Real data
+
+```{r}
+kg2cm <- function(w, a = 0.04478, b = 2.673) ((w * 1000) / a)^(1 / b)
+
+snapper_maxima <- tibble(
+    type = c(
+        rep("length", 8),
+        rep("weight", 4)
+    ),
+    max = c(
+        91.3, 102, 112, 107, 107, 99.2, 95, 82.2,
+        kg2cm(c(11.8, 18.4, 16.5, 17.2))
+    )
+)
+```
+
+## NEM (snapper)
+
+```{r}
+
+mod <- cmdstan_model("models/max_est.stan", stanc_options = list("O1"))
+
+snapper_nem_fit <- mod$sample(
+    data = list(
+        k = length(snapper_maxima$max),
+        x = snapper_maxima$max
+    ),
+    iter_warmup = 1000,
+    iter_sampling = 2000,
+    chains = 4,
+    parallel_chains = 4,
+    refresh = 500,
+    save_warmup = TRUE
+)
+
+snapper_fit_summary <-
+    snapper_nem_fit |>
+    posterior::summarise_draws()
+
+
+plan(multisession)
+snapper_estimates <-
+  snapper_nem_fit %>%
+  posterior::as_draws_df() %>%
+  as_tibble() %>%
+  select(mu, sigma, lambda, .draw, .iteration, .chain) %>%
+  expand_grid(size = 0:200) %>%
+  mutate(nem_max = future_pmap_dbl(
+    .l = list(
+      mu = mu,
+      sigma = sigma,
+      n = length(snapper_maxima$max)*lambda
+    ),
+    .f = expected_max
+  ),
+  nem_max100 = future_pmap_dbl(
+    .l = list(
+      mu = mu,
+      sigma = sigma,
+      n = 100*lambda
+    ),
+    .f = expected_max
+  )) %>% 
+  reframe(
+    max_fit = mean(nem_max),
+    max_lwr = quantile(nem_max, 0.025),
+    max_upr = quantile(nem_max, 0.975),
+    max100_fit = mean(nem_max),
+    max100_lwr = quantile(nem_max, 0.025),
+    max100_upr = quantile(nem_max, 0.975),
+    .by = size
+  )
+plan(sequential)
+
+
+snapper_estimates %>%
+    ggplot(aes(size, max_fit)) +
+    geom_ribbon(aes(ymin = max_lwr, ymax = max_upr),
+        fill = "grey70",
+        alpha = 0.8
+    ) +
+    geom_line() +
+    scale_x_continuous(label = scales::label_number(suffix = "cm")) +
+    theme_classic(20) +
+    geom_rug(aes(x = maxima),
+        data = tibble(maxima = snapper_maxima$max),
+        col = "purple",
+        inherit.aes = FALSE
+    ) +
+    labs(
+        x = "Body length, x",
+        y = "Pr(x > Lmax)"
+    )
+
+ggsave("output/figures/snapper_numerical_est.png",
+    width = 10, height = 7
+)
+```
