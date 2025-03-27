@@ -37,7 +37,7 @@ pacman::p_load(
 source("R/01_simulation.R")
 source("R/02_functions.R")
 source("R/04_evt_analysis.R")
-source("R/05_numerical.R")
+source("R/05_finitesample.R")
 
 
 save_figures <- FALSE
@@ -172,8 +172,12 @@ scenario1_max100 <- expected_max(n = 100*single_lambda, mu = single_mu, sigma = 
 ## EVT (single)
 
 ```{r}
+
 # the EVT fit
 scenario1_evt_fit <- evd::fgev(x = scenario1_maxima)
+
+evt_stan <- 
+
 
 # parameters
 scenario1_gev_loc <- scenario1_evt_fit$estimate["loc"]
@@ -239,7 +243,7 @@ max_k100_upr <- gev_exp_max(
 )
 ```
 
-## Numerical (single)
+## Exact finite-sample (single)
 
 ```{r}
 
@@ -500,7 +504,7 @@ p_simulation_bias <-
     geom_abline(slope = 1) +
     facet_grid(n_lambda ~ name, scales = "free", 
                labeller = labeller(
-                   name = c(gev_max = "Extreme value theory", nem_max = "Numerical estimation"),
+                   name = c(gev_max = "Extreme value theory", nem_max = "Exact finite-sample"),
                    n_lambda = function(x) paste0("n = ", x)
                )) +
     theme_minimal(20) +
@@ -545,7 +549,7 @@ p_simulation_bias_errorbars <-
     geom_abline(slope = 1) +
     facet_grid(n_lambda ~ name, scales = "free", 
                labeller = labeller(
-                   name = c(gev_max = "Extreme value theory", nem_max = "Numerical estimation"),
+                   name = c(gev_max = "Extreme value theory", nem_max = "Exact finite-sample"),
                    n_lambda = function(x) paste0("n = ", x)
                )) +
     theme_minimal(20) +
@@ -590,7 +594,7 @@ p_simulation_bias_errorbars_k100 <-
     geom_abline(slope = 1) +
     facet_grid(n_lambda ~ name, scales = "free", 
                labeller = labeller(
-                   name = c(gev_max = "Extreme value theory", nem_max = "Numerical estimation"),
+                   name = c(gev_max = "Extreme value theory", nem_max = "Exact finite-sample"),
                    n_lambda = function(x) paste0("n = ", x)
                )) +
     theme_minimal(20) +
@@ -710,7 +714,7 @@ snapper_estimates %>%
         y = "Pr(x > Lmax)"
     )
 
-ggsave("output/figures/snapper_numerical_est.png",
+ggsave("output/figures/snapper_finitesample_est.png",
     width = 10, height = 7
 )
 ```
