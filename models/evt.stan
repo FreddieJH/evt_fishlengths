@@ -1,46 +1,32 @@
+// Bayesian GEV model for estimating maximum length
 data {
-    int<lower=0> N;             // number of observations
-    vector[N] x;                // input data (maxima)
+  int<lower=0> k;           // number of observations
+  vector[k] x;              // observed maxima values
 }
 
 parameters {
-    real<lower=0> mu;           // location parameter
-    real<lower=0> sigma;        // scale parameter
-    real xi;                    // shape parameter (can be negative, zero, or positive)
+  real mu;                  // location parameter
+  real<lower=0> sigma;      // scale parameter (must be positive)
+  real xi;                  // shape parameter
 }
 
 model {
-    // Priors
-    mu ~ normal(0, 100);        // Weakly informative prior for location
-    sigma ~ cauchy(0, 5);       // Half-Cauchy prior for scale (positive)
-    xi ~ normal(0, 10);         // Weakly informative prior for shape
-
-    // Likelihood using GEV distribution
-    for (i in 1:N) {
-        // GEV CDF and log-likelihood calculation
-        real z = 1 + xi * (x[i] - mu) / sigma;
-        
-        if (z > 0) {
-            target += log(1/sigma) - (1/xi + 1) * log(z) - pow(z, -1/xi);
-        }
+  // Priors
+  mu ~ normal(mean(x), 10);     // centered around sample mean with wide variance
+  sigma ~ lognormal(0, 1);      // ensures positivity, reasonably diffuse
+  xi ~ normal(0, 0.5);          // shape parameter typically small, centered at 0
+  
+  // GEV likelihood
+  for (i in 1:k) {
+    if (xi == 0) {
+      target += -(log(sigma) + (x[i] - mu)/sigma + exp(-(x[i] - mu)/sigma));
+    } else {
+      real z = (x[i] - mu)/sigma;
+      if (1 + xi * z > 0) {
+        target += -(log(sigma) + (1 + 1/xi) * log1p(xi * z) + pow(1 + xi * z, -1/xi));
+      } else {
+        target += negative_infinity();  // outside support
+      }
     }
-}
-
-generated quantities {
-    vector[N] log_lik;          // Log-likelihood for each observation
-    array[N] real ypred;              // Posterior predictive samples
-
-    for (i in 1:N) {
-        // Log-likelihood calculation
-        real z = 1 + xi * (x[i] - mu) / sigma;
-        
-        if (z > 0) {
-            log_lik[i] = log(1/sigma) - (1/xi + 1) * log(z) - pow(z, -1/xi);
-        } else {
-            log_lik[i] = negative_infinity();
-        }
-
-        // Posterior predictive sampling
-        ypred[i] = mu + (sigma / xi) * (pow(uniform_rng(0, 1), -xi) - 1);
-    }
+  }
 }

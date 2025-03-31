@@ -2,6 +2,12 @@
 # calculating the maxima for each scenario
 est_sim_max <- function(scenario_input){ 
 
+    maxima_filepath <- "data/simulation/scenario_maxima.csv"
+    # get stored maxima values
+    if(file.exists(maxima_filepath)) {
+        read_csv(maxima_filepath)
+    }
+    
     future::plan(multisession)
     sim_tbl_max <-
         scenario_input %>%
