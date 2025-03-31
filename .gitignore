@@ -53,3 +53,8 @@ evt_plots/
 old/
 
 models/output_data/
+
+docs/
+
+*.parquet
+*.csv
