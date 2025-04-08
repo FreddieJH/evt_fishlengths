@@ -1,0 +1,221 @@
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(truncnorm)
+
+# GAMMA DISTRIBUTION -----------------------------------------------------------------
+# gamma(alpha, theta)
+# mean = alpha*theta
+# variance = alpha*(theta^2)
+
+# solving simultatious equations:
+# alpha = mean/theta = var/theta^2
+# alpha = mean^2/var
+# beta = mean/alpha = sqrt(var/alpha)
+# beta = var/mean
+
+# LOGNORMAL DISTRIBUTION -----------------------------------------------------------------
+# lnorm(meanlog, sdlog)
+# mean = exp(meanlog+(sdlog^2/2))
+# variance = exp(sdlog^2 - 1)exp(2*meanlog+(sdlog^2))
+
+# solving simultatious equations:
+# Solving for sdlog:
+# CV = sqrt(var)/μ = sqrt(exp(sdlog^2) - 1)
+# sdlog^2 = log(1 + CV^2)
+# sdlog = sqrt(log(1 + CV^2)) = sqrt(log(1 + var/mean^2))
+
+# Solving for meanlog:
+# meanlog = log(mean) - (sdlog^2/2)
+# meanlog = log(mean) - log(1 + var/mean^2)/2
+# meanlog = log(mean/sqrt(1 + var/mean^2))
+
+
+
+# Create scenarios grid
+scenarios <-
+  expand_grid(
+    k = c(3, 5, 10, 20, 30, 50, 100, 200),
+    n_lambda = c(100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000),
+    mean = seq(20, 120, by = 20),
+    dist = c("truncnorm", "lognormal", "gamma")
+  ) |>
+  mutate(
+    variance = (mean * 0.34)^2,
+    min_size = 0,
+    filename = paste0(
+      "k", k,
+      "_lambda", n_lambda,
+      "_mean", mean, 
+      "_", dist
+    )
+  )
+
+# Calculate all parameters at once
+params_data <- scenarios %>%
+  mutate(
+    # Gamma parameters
+    gamma_shape = mean^2 / variance,
+    gamma_scale = variance / mean,
+    
+    # Lognormal parameters
+    lnorm_meanlog = log(mean/sqrt(1 + var/mean^2)), # same as: log(mean^2 / sqrt(variance + mean^2))
+    lnorm_sdlog = sqrt(log(1 + (variance / mean^2))),
+    
+    # Truncated normal parameters
+    tn_mean = mean,
+    tn_sd = sqrt(variance)
+  )
+
+# Function to generate random samples for all scenarios of a given distribution type
+generate_samples_vectorized <- function(dist_type, n_samples = 1000) {
+  # Filter scenarios for the given distribution
+  dist_scenarios <- params_data %>% filter(dist == dist_type)
+  n_scenarios <- nrow(dist_scenarios)
+  
+  # Create a data frame with repeated rows (one for each sample)
+  result <- dist_scenarios %>%
+    slice(rep(1:n(), each = n_samples)) %>%
+    select(filename) %>%
+    mutate(scenario_id = rep(1:n_scenarios, each = n_samples),
+           sample_id = rep(1:n_samples, times = n_scenarios))
+  
+  # Generate all random numbers at once based on the distribution type
+  if (dist_type == "gamma") {
+    # Replicate shape and scale parameters for each sample
+    shapes <- rep(dist_scenarios$gamma_shape, each = n_samples)
+    scales <- rep(dist_scenarios$gamma_scale, each = n_samples)
+    
+    # Generate all gamma random numbers at once
+    result$x <- rgamma(n_scenarios * n_samples, shape = shapes, scale = scales)
+    
+  } else if (dist_type == "lognormal") {
+    # Replicate lognormal parameters for each sample
+    meanlogs <- rep(dist_scenarios$lnorm_meanlog, each = n_samples)
+    sdlogs <- rep(dist_scenarios$lnorm_sdlog, each = n_samples)
+    
+    # Generate all lognormal random numbers at once
+    result$x <- rlnorm(n_scenarios * n_samples, meanlog = meanlogs, sdlog = sdlogs)
+    
+  } else if (dist_type == "truncnorm") {
+    # For truncnorm, we need to generate in chunks due to parameter structure
+    result$x <- numeric(nrow(result))
+    
+    for (i in 1:n_scenarios) {
+      start_idx <- ((i-1) * n_samples) + 1
+      end_idx <- i * n_samples
+      
+      result$x[start_idx:end_idx] <- rtruncnorm(
+        n_samples,
+        mean = dist_scenarios$tn_mean[i],
+        sd = dist_scenarios$tn_sd[i],
+        a = 0
+      )
+    }
+  }
+  
+  # Clean up the result
+  result %>% select(x, filename)
+}
+
+  out_gamma <- generate_samples_vectorized("gamma") 
+  out_lnorm <- generate_samples_vectorized("lognormal")
+  out_tnorm <- generate_samples_vectorized("truncnorm")
+
+
+# Optional: Combine all results if needed
+all_samples <- bind_rows(
+  out_gamma,
+  out_lnorm,
+  out_tnorm
+)
+library(tidyverse)
+
+{
+p_scenario_dists <- 
+    all_samples %>% 
+    left_join(scenarios) %>% 
+    mutate(mean = as.factor(mean)) %>% 
+    ggplot(aes(x = x, group = filename, col = mean)) +
+    geom_density() +
+    facet_wrap(dist~k)
+
+   ggsave(
+    filename = "output/figures/p_scenario_dists.png",
+    plot = p_scenario_dists,
+    height = 12,
+    width = 10
+) 
+}
+
+rgamma(1000, 50, 0.1) %>% 
+ggplot(aes())
+
+
+tibble(mean = c(2, 20, 50, 100)) %>% 
+mutate(variance = (mean*0.34)^2) %>% 
+  mutate(
+    # Gamma parameters
+    gamma_shape = mean^2 / variance,
+    gamma_scale = variance / mean,
+    
+    # Lognormal parameters
+    lnorm_meanlog = log(mean/sqrt(1 + variance/mean^2)), # same as: log(mean^2 / sqrt(variance + mean^2))
+    lnorm_sdlog = sqrt(log(1 + (variance / mean^2))),
+    
+    # Truncated normal parameters
+    tn_mean = mean,
+    tn_sd = sqrt(variance)
+  ) %>% 
+  expand_grid(x = 0:200) %>% 
+  mutate(pgamma = dgamma(x, shape = gamma_shape, scale = gamma_scale)) %>% 
+  ggplot(aes(x = x, y = pgamma, col = as.factor(mean))) +
+  geom_line()
+
+
+  
+tibble(mean = c(2, 20, 50, 100)) %>% 
+mutate(variance = (mean*0.34)^2) %>% 
+  mutate(
+    # Gamma parameters
+    gamma_shape = mean^2 / variance,
+    gamma_scale = variance / mean,
+    
+    # Lognormal parameters
+    lnorm_meanlog = log(mean/sqrt(1 + variance/mean^2)), # same as: log(mean^2 / sqrt(variance + mean^2))
+    lnorm_sdlog = sqrt(log(1 + (variance / mean^2))),
+    
+    # Truncated normal parameters
+    tn_mean = mean,
+    tn_sd = sqrt(variance)
+  ) %>% 
+  expand_grid(x = 0:200) %>% 
+  mutate(pgamma = dtruncnorm(x, mean = tn_mean, sd = tn_sd, a= 0) %>% 
+  ggplot(aes(x = x, y = pgamma, col = as.factor(mean))) +
+  geom_line()
+
+  tibble(mean = c(2, 20, 50, 100)) %>% 
+mutate(variance = (mean*0.34)^2) %>% 
+  mutate(
+    # Gamma parameters
+    gamma_shape = mean^2 / variance,
+    gamma_scale = variance / mean,
+    
+    # Lognormal parameters
+    lnorm_meanlog = log(mean/sqrt(1 + variance/mean^2)), # same as: log(mean^2 / sqrt(variance + mean^2))
+    lnorm_sdlog = sqrt(log(1 + (variance / mean^2))),
+    
+    # Truncated normal parameters
+    tn_mean = mean,
+    tn_sd = sqrt(variance)
+  ) %>% 
+  expand_grid(x = 1:1000) %>% 
+  rowwise() %>% 
+  mutate(p = rgamma(n = 1, shape = gamma_shape, scale = gamma_scale)) %>% 
+  # mutate(pgamma = list(rgamma(100, shape = gamma_shape, scale = gamma_scale))) %>% 
+  ggplot(aes(x = p, col = as.factor(mean))) +
+  geom_density()+
+  facet_wrap(~mean, scales = "free")
+
+
+ggsave("output/figures/changing_gamma_mean.png")
