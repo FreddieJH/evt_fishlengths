@@ -13,13 +13,18 @@ model {
   // Priors
   mu ~ normal(30, 20);
   sigma ~ normal(10, 5);
-  lambda ~ gamma(50, 0.1);
+  lambda ~ gamma(2, 0.1);
 
 
   target += k*log(lambda) - lambda*k;
 
   for (i in 1:k) {
-  target += lambda*normal_cdf(x[i] | mu, sigma) + normal_lpdf(x[i]|mu, sigma);
+    // Using truncated normal instead of normal
+    real norm_const = 1 - normal_cdf(0 | mu, sigma);  // Normalisation constant
+    real trunc_cdf = (normal_cdf(x[i] | mu, sigma) - normal_cdf(0 | mu, sigma)) / norm_const;
+    real trunc_lpdf = normal_lpdf(x[i] | mu, sigma) - log(norm_const);
+    target += lambda * trunc_cdf + trunc_lpdf;
+  // target += lambda*normal_cdf(x[i] | mu, sigma) + normal_lpdf(x[i]|mu, sigma);
 }
 }
 

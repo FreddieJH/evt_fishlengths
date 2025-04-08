@@ -1,0 +1,200 @@
+# Load required libraries
+library(shiny)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(truncnorm)
+
+# Function to calculate distribution parameters
+calculate_params <- function(mean_val, var_val) {
+  # Gamma parameters
+  gamma_shape <- mean_val^2 / var_val
+  gamma_rate <- mean_val / var_val
+  
+  # Log-normal parameters
+  logn_meanlog <- log(mean_val^2 / sqrt(var_val + mean_val^2))
+  logn_sdlog <- sqrt(log(1 + var_val / mean_val^2))
+  
+  # Truncated normal parameters (mean and sd for underlying normal)
+  # Using approximation for truncated normal parameters
+  tn_mean <- mean_val
+  tn_sd <- sqrt(var_val)
+  
+  return(list(
+    gamma = list(shape = gamma_shape, rate = gamma_rate),
+    lognormal = list(meanlog = logn_meanlog, sdlog = logn_sdlog),
+    truncnorm = list(mean = tn_mean, sd = tn_sd, a = 0, b = Inf)
+  ))
+}
+
+# Function to generate samples from each distribution
+generate_samples <- function(params, k_samples, n_per_sample) {
+  # Initialize data frame
+  all_samples <- data.frame()
+  
+  # Generate samples for each distribution
+  for (i in 1:k_samples) {
+    # Gamma samples
+    gamma_samples <- rgamma(n_per_sample, 
+                           shape = params$gamma$shape, 
+                           rate = params$gamma$rate)
+    
+    # Log-normal samples
+    lognormal_samples <- rlnorm(n_per_sample, 
+                               meanlog = params$lognormal$meanlog, 
+                               sdlog = params$lognormal$sdlog)
+    
+    # Truncated normal samples
+    truncnorm_samples <- rtruncnorm(n_per_sample, 
+                                   a = params$truncnorm$a, 
+                                   b = params$truncnorm$b,
+                                   mean = params$truncnorm$mean, 
+                                   sd = params$truncnorm$sd)
+    
+    # Combine into data frame
+    sample_df <- data.frame(
+      sample_id = i,
+      gamma = gamma_samples,
+      lognormal = lognormal_samples,
+      truncnorm = truncnorm_samples
+    )
+    
+    all_samples <- rbind(all_samples, sample_df)
+  }
+  
+  # Convert to long format for ggplot
+  all_samples_long <- all_samples %>%
+    pivot_longer(cols = c(gamma, lognormal, truncnorm),
+                names_to = "distribution",
+                values_to = "value")
+  
+  return(all_samples_long)
+}
+
+# UI Definition
+ui <- fluidPage(
+  titlePanel("Distribution Comparison"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      numericInput("mean", "Mean:", value = 60, min = 1),
+    #   numericInput("variance", "Variance:", value = (60 * 0.34)^2, min = 0.01),
+      selectInput("k_samples", "Number of Samples (k):", 
+                 choices = c(3, 5, 10, 20, 30, 50, 100, 200),
+                 selected = 10),
+      selectInput("n_per_sample", "Observations per Sample (n):", 
+                 choices = c(100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000),
+                 selected = 1000),
+      actionButton("generate", "Generate Plots"),
+      hr(),
+      # Display calculated parameters
+      h4("Calculated Parameters:"),
+      verbatimTextOutput("paramText")
+    ),
+    
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Density Plots", plotOutput("densityPlot", height = "500px")),
+        tabPanel("Histogram", plotOutput("histPlot", height = "500px")),
+        tabPanel("QQ Plots", plotOutput("qqPlot", height = "500px"))
+      )
+    )
+  )
+)
+
+# Server logic
+server <- function(input, output, session) {
+  
+  # Reactive values
+  params <- reactiveVal(NULL)
+  samples <- reactiveVal(NULL)
+  
+  # Calculate parameters and generate samples when button is clicked
+  observeEvent(input$generate, {
+    # Calculate parameters
+    current_params <- calculate_params(input$mean, (input$mean* 0.34)^2)
+    params(current_params)
+    
+    # Generate samples
+    current_samples <- generate_samples(
+      current_params, 
+      as.numeric(input$k_samples), 
+      as.numeric(input$n_per_sample)
+    )
+    samples(current_samples)
+  })
+  
+  # Display calculated parameters
+  output$paramText <- renderText({
+    if (is.null(params())) return("Click 'Generate Plots' to calculate parameters")
+    
+    p <- params()
+    paste0(
+      "Gamma: shape = ", round(p$gamma$shape, 4), ", rate = ", round(p$gamma$rate, 4), "\n",
+      "Lognormal: meanlog = ", round(p$lognormal$meanlog, 4), ", sdlog = ", round(p$lognormal$sdlog, 4), "\n",
+      "Truncated Normal: mean = ", round(p$truncnorm$mean, 4), ", sd = ", round(p$truncnorm$sd, 4), ", a = 0, b = Inf"
+    )
+  })
+  
+  # Density plot
+  output$densityPlot <- renderPlot({
+    req(samples())
+    
+    ggplot(samples(), aes(x = value, fill = distribution)) +
+      geom_density(alpha = 0.5) +
+      labs(title = paste0("Density Plot (Mean = ", input$mean, ", Variance = ", round((input$mean* 0.34)^2, 2), ")"),
+           x = "Value", y = "Density") +
+      theme_minimal() +
+      scale_fill_brewer(palette = "Set1") +
+      theme(legend.position = "bottom")
+  })
+  
+  # Histogram
+  output$histPlot <- renderPlot({
+    req(samples())
+    
+    ggplot(samples(), aes(x = value, fill = distribution)) +
+      geom_histogram(position = "identity", alpha = 0.5, bins = 50) +
+      labs(title = paste0("Histogram (Mean = ", input$mean, ", Variance = ", round((input$mean* 0.34)^2, 2), ")"),
+           x = "Value", y = "Count") +
+      theme_minimal() +
+      scale_fill_brewer(palette = "Set1") +
+      theme(legend.position = "bottom") +
+      facet_wrap(~distribution, ncol = 1)
+  })
+  
+  # QQ plots
+  output$qqPlot <- renderPlot({
+    req(samples())
+    
+    # Theoretical quantiles based on distribution
+    samples_data <- samples() %>%
+      group_by(distribution) %>%
+      mutate(prob = (row_number() - 0.5) / n()) %>%
+      ungroup()
+    
+    # Add theoretical quantiles
+    p <- params()
+    
+    samples_data <- samples_data %>%
+      mutate(theoretical = case_when(
+        distribution == "gamma" ~ qgamma(prob, shape = p$gamma$shape, rate = p$gamma$rate),
+        distribution == "lognormal" ~ qlnorm(prob, meanlog = p$lognormal$meanlog, sdlog = p$lognormal$sdlog),
+        distribution == "truncnorm" ~ qtruncnorm(prob, a = 0, b = Inf, mean = p$truncnorm$mean, sd = p$truncnorm$sd),
+        TRUE ~ NA_real_
+      ))
+    
+    ggplot(samples_data, aes(x = theoretical, y = value, color = distribution)) +
+      geom_point(alpha = 0.5) +
+      geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+      labs(title = "Q-Q Plot",
+           x = "Theoretical Quantiles", y = "Sample Quantiles") +
+      theme_minimal() +
+      scale_color_brewer(palette = "Set1") +
+      theme(legend.position = "bottom") +
+      facet_wrap(~distribution, scales = "free", ncol = 3)
+  })
+}
+
+# Run the app
+shinyApp(ui = ui, server = server)
