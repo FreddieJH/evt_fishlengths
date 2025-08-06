@@ -1,0 +1,8 @@
+evt_colour <- "orange"
+evt_colour_dark <- "orange"
+efs_colour <- "pink"
+efs_colour_dark <- "#f66b6b"
+efsmult_colour <- "#a1d99b"
+efsmult_colour_dark <- "#31a354"
+data_colour_nearmax <- "purple"
+data_colour_ismax <- "blue"
