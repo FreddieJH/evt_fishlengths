@@ -1,0 +1,36 @@
+Since we are dealing with the truncated normal distribution, instead of the normal, we need to make sure calculate the pdf and cdf when x > 0. We need to make sure that the pdf greater than 0 integrates to 1. 
+
+Step 1. Calculate how much of the distribution is below zero. 
+
+```{python}
+from scipy.stats import norm
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+norm_constant = norm.cdf(0, 10, 5)
+
+x = list(np.arange(-10, 30, 0.1))
+print(x)
+
+y = norm.cdf(x, 10, 5)
+
+def f(t):
+    return norm.cdf(t, 10, 5)
+
+section = np.arange(-10, 0.1, 0.1)
+
+plt.figure(figsize=(8, 6))
+plt.plot(x,y)
+plt.vlines(x = 0, ymin = 0, ymax = 1)
+plt.xlabel('Body size (cm)')
+plt.ylabel('CDF')
+plt.fill_between(section,f(section))
+
+
+```
+
+
+This area under the curve here, is equal to 0.0023 (2.3%) of the total area. We therefore need to normalise the cdf for the rest of the curve so that it sums to 1. The remaining curve is 0.977 (97.7%). So if a $F(x) = 0.5$, we first need to calculate the CDF greater than zero: $F(x) - F(0) = 0.499$ and then normalised it will be slightly higher than that, $F_norm(x) = 0.499/(1-0.023)$. 
+
+For the log version of the pdf, instead of dividing by (1-0.023), we need to minus it, because of the product rule. 
