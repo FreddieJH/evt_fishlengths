@@ -61,7 +61,7 @@ inverse_G_x <- function(
   )$root
 }
 
-# expected value is just x*f(x) where f(x) is the pdf of the max values
+# expected value is just integral of x*g(x) where g(x) is the pdf of the max values
 expected_max <- function(distr, n, par1, par2) {
   integrand <- function(x) {
     x * g_max(x, distr = distr, n = n, par1 = par1, par2 = par2)

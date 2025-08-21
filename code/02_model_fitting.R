@@ -41,8 +41,8 @@ scenarios_truemax <-
   select(scenario_id, true_max, true_max20)
 
 
-posterior_filename <- "data/model_output/posteriors5.parquet"
-posterior_summary_filename <- "data/model_output/posteriors5_summary.parquet"
+posterior_filename <- "data/model_output/posteriors7.parquet"
+posterior_summary_filename <- "data/model_output/posteriors7_summary.parquet"
 
 if (!file.exists(posterior_filename)) {
   future::plan(multisession)
@@ -103,7 +103,7 @@ if (!file.exists(posterior_filename)) {
 posteriors <- arrow::read_parquet(posterior_filename)
 posteriors_summary <- arrow::read_parquet(posterior_summary_filename)
 
-posteriors_max_summary_path <- "data/model_summaries/posteriors5_max_summary.csv"
+posteriors_max_summary_path <- "data/model_summaries/posteriors7_max_summary.csv"
 if (!file.exists(posteriors_max_summary_path)) {
   plan(multisession, workers = availableCores() - 1)
 
@@ -128,8 +128,8 @@ if (!file.exists(posteriors_max_summary_path)) {
         c(est_max, est_max20),
         list(
           fit = median,
-          lwr = ~ quantile(.x, 0.025),
-          upr = ~ quantile(.x, 0.975)
+          lwr = ~ quantile(.x, 0.1),
+          upr = ~ quantile(.x, 0.9)
         )
       ),
       .by = filename
@@ -140,8 +140,10 @@ if (!file.exists(posteriors_max_summary_path)) {
     F_x = F_x,
     g_max = g_max,
     G_max = G_max,
-    inverse_G_x = inverse_G_x,
-    ptnorm = ptnorm
+    # inverse_G_x = inverse_G_x,
+    ptnorm = ptnorm,
+    qtnorm = qtnorm,
+    dtnorm = dtnorm
   )
 
   posteriors_max_summary_efs <-
@@ -151,13 +153,12 @@ if (!file.exists(posteriors_max_summary_path)) {
     mutate(
       est_max = future_pmap_dbl(
         .l = list(
-          p = 1 - (1 / k),
           distr = "tnorm",
           par1 = mu,
           par2 = sigma,
           n = lambda * k
         ),
-        .f = inverse_G_x,
+        .f = expected_max,
         .options = furrr_options(
           seed = TRUE,
           globals = custom_funcs
@@ -165,13 +166,12 @@ if (!file.exists(posteriors_max_summary_path)) {
       ),
       est_max20 = future_pmap_dbl(
         .l = list(
-          p = 1 - (1 / 20),
           distr = "tnorm",
           par1 = mu,
           par2 = sigma,
           n = lambda * 20
         ),
-        .f = inverse_G_x,
+        .f = expected_max,
         .options = furrr_options(
           seed = TRUE,
           globals = custom_funcs
@@ -183,8 +183,8 @@ if (!file.exists(posteriors_max_summary_path)) {
         c(est_max, est_max20),
         list(
           fit = median,
-          lwr = ~ quantile(.x, 0.025),
-          upr = ~ quantile(.x, 0.975)
+          lwr = ~ quantile(.x, 0.1),
+          upr = ~ quantile(.x, 0.9)
         )
       ),
       .by = filename
@@ -197,13 +197,12 @@ if (!file.exists(posteriors_max_summary_path)) {
     mutate(
       est_max = future_pmap_dbl(
         .l = list(
-          p = 1 - (1 / k),
           distr = "tnorm",
           par1 = mu,
           par2 = sigma,
           n = lambda * k
         ),
-        .f = inverse_G_x,
+        .f = expected_max,
         .options = furrr_options(
           seed = TRUE,
           globals = custom_funcs
@@ -211,13 +210,12 @@ if (!file.exists(posteriors_max_summary_path)) {
       ),
       est_max20 = future_pmap_dbl(
         .l = list(
-          p = 1 - (1 / 20),
           distr = "tnorm",
           par1 = mu,
           par2 = sigma,
           n = lambda * 20
         ),
-        .f = inverse_G_x,
+        .f = expected_max,
         .options = furrr_options(
           seed = TRUE,
           globals = custom_funcs
@@ -229,8 +227,8 @@ if (!file.exists(posteriors_max_summary_path)) {
         c(est_max, est_max20),
         list(
           fit = median,
-          lwr = ~ quantile(.x, 0.025),
-          upr = ~ quantile(.x, 0.975)
+          lwr = ~ quantile(.x, 0.1),
+          upr = ~ quantile(.x, 0.9)
         )
       ),
       .by = filename

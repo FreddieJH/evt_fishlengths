@@ -144,25 +144,46 @@ parameters {
 
 model {
   // Priors
-  loc ~ normal(mean(x), 10);     // centered around sample mean with wide variance
+  loc ~ normal(100, 50);     // centered around sample mean with wide variance
   scale ~ lognormal(0, 1);      // ensures positivity, reasonably diffuse
-  shape ~ normal(0, 0.5);          // shape parameter typically small, centered at 0
-  
+  shape ~ normal(0, 0.5);       // shape parameter typically small, centered at 0
+
   // GEV likelihood
   for (i in 1:k) {
     if (shape == 0) {
-      target += -(log(scale) + (x[i] - loc)/scale + exp(-(x[i] - loc)/scale));
+    real t_i = exp(-(x[i]-loc)/scale);
+    target += log(1/scale) + (shape+1)*(log(t_i)) - t_i;
     } else {
-      real z = (x[i] - loc)/scale;
-      if (1 + shape * z > 0) {
-        target += -(log(scale) + (1 + 1/shape) * log1p(shape * z) + pow(1 + shape * z, -1/shape));
-      } else {
-        target += negative_infinity();  // outside support
-      }
+      real t_i = pow(1 + (shape * ((x[i] - loc)/scale)), -1/shape);
+      target += log(1/scale) + (shape+1)*(log(t_i)) - t_i;
     }
   }
 }"
 }
+
+# stan_code_evt <- {
+#   "data {
+#   int<lower=0> k;           // number of observations
+#   vector[k] x;              // observed maxima values
+# }
+
+# parameters {
+#   real loc;                  // location parameter
+#   real<lower=0> scale;      // scale parameter (must be positive)
+# }
+
+# model {
+#   // Priors
+#   loc ~ normal(mean(x), 10);     // centered around sample mean with wide variance
+#   scale ~ lognormal(0, 1);      // ensures positivity, reasonably diffuse
+
+#   // GEV likelihood
+#   for (i in 1:k) {
+#    real t_i = exp(-(x[i]-loc)/scale);
+#     target += log(1/scale) + (1)*(log(t_i)) - t_i;
+#   }
+# }"
+# }
 
 fit_maxima_model <- function(
   maxima,
@@ -220,6 +241,13 @@ fit_maxima_model <- function(
     "evt" = length(maxima),
     "efs" = length(maxima),
     "efsmult" = k
+  )
+
+  n_obs <- switch(
+    type,
+    "evt" = length(maxima),
+    "efs" = length(maxima),
+    "efsmult" = length(maxima)
   )
 
   mod <- cmdstanr::cmdstan_model(stan_file, stanc_options = list("O1"))

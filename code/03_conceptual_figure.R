@@ -20,11 +20,6 @@ concept_n <- 50 # sample size per sample
 save_figures <- TRUE
 
 
-# install.packages("rcartocolor")
-# rcartocolor::carto_pal(8, "Antique")
-# rcartocolor::display_carto_pal(7, "Antique")
-# scale_color_brewer(palette = "Antique") # use this one? need a similar dark and light version for each colour
-
 # Underlying population  -------------------------------------------------
 
 # Random sampling of truncated normal distribution
@@ -172,7 +167,7 @@ get_concept_expmax <- function(model_type, k) {
         as.numeric()
 }
 
-# Model fitting + plotting
+# Model fitting
 for (model_type in c("evt", "efs", "efsmult")) {
     # model fitting
     assign(
@@ -197,8 +192,8 @@ for (model_type in c("evt", "efs", "efsmult")) {
             ) |>
             summarise(
                 p_fit = mean(pdf),
-                p_lwr = quantile(pdf, 0.025),
-                p_upr = quantile(pdf, 0.975),
+                p_lwr = quantile(pdf, 0.1),
+                p_upr = quantile(pdf, 0.9),
                 .by = size
             )
     )
@@ -214,7 +209,7 @@ for (model_type in c("evt", "efs", "efsmult")) {
                         .l = list(
                             x = size,
                             distr = "tnorm",
-                            n = lambda,
+                            n = concept_k * lambda,
                             par1 = mu,
                             par2 = sigma
                         ),
@@ -223,137 +218,177 @@ for (model_type in c("evt", "efs", "efsmult")) {
                 ) |>
                 summarise(
                     p_fit = mean(pdf),
-                    p_lwr = quantile(pdf, 0.025),
-                    p_upr = quantile(pdf, 0.975),
+                    p_lwr = quantile(pdf, 0.1),
+                    p_upr = quantile(pdf, 0.9),
                     .by = size
                 )
         }
     )
-
-    #  plotting
-
-    model_labels <- c(
-        evt = "Extreme Value Theory",
-        efs = "Exact Finite Sample",
-        efsmult = "Exact Finite Sample Multiple Maxima"
-    )
-
-    plot <-
-        get(paste0("concept_", model_type, "_pdf_summary")) |>
-        ggplot() +
-        geom_line(aes(size, p), data = concept_popln_pdf) +
-        geom_ribbon(
-            aes(x = size, ymin = p_lwr, ymax = p_upr),
-            fill = get(paste0(model_type, "_colour")),
-            alpha = 0.3
-        ) +
-        geom_line(
-            aes(x = size, y = p_fit),
-            linewidth = 2,
-            lty = ifelse(model_type == "evt", "solid", "dashed"),
-            col = get(paste0(model_type, "_colour"))
-        ) +
-        {
-            if (model_type != "evt") {
-                list(
-                    geom_ribbon(
-                        aes(x = size, ymin = p_lwr, ymax = p_upr),
-                        fill = get(paste0(model_type, "_colour_dark")),
-                        alpha = 0.3,
-                        data = get(paste0(
-                            "concept_",
-                            model_type,
-                            "_pdfmax_summary"
-                        ))
-                    ),
-                    geom_line(
-                        aes(x = size, y = p_fit),
-                        linewidth = 1,
-                        lty = "solid",
-                        col = get(paste0(model_type, "_colour_dark")),
-                        data = get(paste0(
-                            "concept_",
-                            model_type,
-                            "_pdfmax_summary"
-                        ))
-                    )
-                )
-            }
-        } +
-        geom_point(
-            aes(x = value, y = 0),
-            col = "black",
-            fill = data_colour_ismax,
-            size = 4,
-            pch = 21,
-            alpha = 0.7,
-            data = samples_df |> filter(is_max)
-        ) +
-        {
-            if (model_type == "efsmult") {
-                geom_point(
-                    aes(x = value, y = 0),
-                    col = "black",
-                    fill = data_colour_nearmax,
-                    size = 4,
-                    pch = 21,
-                    alpha = 0.7,
-                    data = samples_df |> filter(near_max, !is_max)
-                )
-            }
-        } +
-        geom_vline(
-            xintercept = get_concept_expmax(model_type, concept_k),
-            col = "black",
-            lty = "dotted"
-        ) +
-        geom_vline(
-            xintercept = get_concept_expmax(model_type, k = 20),
-            col = "black",
-            lty = "dashed"
-        ) +
-        geom_vline(
-            xintercept = get_concept_expmax(model_type, k = 100),
-            col = "black",
-            lty = "solid"
-        ) +
-        labs(x = "Body Size (cm)", y = "Density") +
-        theme_classic(20) +
-        facet_grid(
-            cols = vars(1),
-            labeller = labeller(.cols = function(x) model_labels[model_type])
-        ) +
-        theme(
-            legend.position = "none",
-            axis.ticks.y = element_blank(),
-            axis.text.y = element_blank(),
-            axis.title.y = element_blank()
-        )
-
-    assign(
-        x = paste0("concept_", model_type, "_plot"),
-        value = plot
-    )
 }
+
+p_ordering <- c(
+    "evt" = "Extreme Value Theory",
+    "efs" = "Exact Finite Sample",
+    "efsmult" = "Exact Finite Sample Multiple Maxima"
+)
+
+expmax_vlines <-
+    tibble(model_type = names(p_ordering), model_type_full = p_ordering) |>
+    mutate(
+        max = map2_dbl(
+            .x = model_type,
+            .y = concept_k,
+            .f = get_concept_expmax
+        ),
+        max20 = map2_dbl(.x = model_type, .y = 20, .f = get_concept_expmax),
+        max100 = map2_dbl(.x = model_type, .y = 100, .f = get_concept_expmax)
+    ) |>
+    mutate(model_type_full = factor(model_type_full, levels = p_ordering))
+
+combined_plot <-
+    bind_rows(
+        concept_evt_pdf_summary |> mutate(model_type = "evt"),
+        concept_efs_pdf_summary |> mutate(model_type = "efs"),
+        concept_efsmult_pdf_summary |> mutate(model_type = "efsmult")
+    ) |>
+    mutate(
+        model_type_full = case_when(
+            model_type == "evt" ~ "Extreme Value Theory",
+            model_type == "efs" ~ "Exact Finite Sample",
+            model_type == "efsmult" ~ "Exact Finite Sample Multiple Maxima"
+        ),
+        light_fill = case_when(
+            model_type == "evt" ~ evt_colour,
+            model_type == "efs" ~ efs_colour,
+            model_type == "efsmult" ~ efsmult_colour
+        ),
+        dark_fill = case_when(
+            model_type == "evt" ~ evt_colour_dark,
+            model_type == "efs" ~ efs_colour_dark,
+            model_type == "efsmult" ~ efsmult_colour_dark
+        ),
+        main_lty = case_when(
+            model_type == "evt" ~ "solid",
+            model_type == "efs" ~ "dashed",
+            model_type == "efsmult" ~ "dashed"
+        )
+    ) |>
+    mutate(model_type_full = factor(model_type_full, levels = p_ordering)) |>
+    filter(size <= 140) |>
+    ggplot(aes(x = size, y = p_fit)) +
+    geom_line(aes(y = p), data = concept_popln_pdf) +
+    geom_ribbon(
+        aes(ymin = p_lwr, ymax = p_upr, fill = light_fill),
+        alpha = 0.4
+    ) +
+    geom_line(
+        aes(y = p_fit, col = light_fill, lty = main_lty),
+        linewidth = 2
+    ) +
+    geom_point(
+        aes(x = value, y = 0),
+        col = "black",
+        fill = data_colour_ismax,
+        size = 4,
+        pch = 21,
+        alpha = 0.7,
+        data = samples_df |> filter(is_max)
+    ) +
+    geom_point(
+        aes(x = value, y = 0),
+        col = "black",
+        fill = data_colour_nearmax,
+        size = 4,
+        pch = 21,
+        alpha = 0.7,
+        data = samples_df |>
+            filter(near_max, !is_max) |>
+            mutate(
+                model_type_full = factor(
+                    "Exact Finite Sample Multiple Maxima",
+                    levels = p_ordering
+                )
+            )
+    ) +
+    geom_ribbon(
+        aes(ymin = p_lwr, ymax = p_upr),
+        fill = efs_colour_dark,
+        alpha = 0.5,
+        data = concept_efs_pdfmax_summary |>
+            mutate(
+                model_type_full = factor(
+                    "Exact Finite Sample",
+                    levels = p_ordering
+                )
+            )
+    ) +
+    geom_line(
+        linewidth = 1.5,
+        col = efs_colour_dark,
+        data = concept_efs_pdfmax_summary |>
+            mutate(
+                model_type_full = factor(
+                    "Exact Finite Sample",
+                    levels = p_ordering
+                )
+            )
+    ) +
+    geom_ribbon(
+        aes(ymin = p_lwr, ymax = p_upr),
+        fill = efsmult_colour_dark,
+        alpha = 0.5,
+        data = concept_efsmult_pdfmax_summary |>
+            mutate(
+                model_type_full = factor(
+                    "Exact Finite Sample Multiple Maxima",
+                    levels = p_ordering
+                )
+            )
+    ) +
+    geom_line(
+        linewidth = 1.5,
+        col = efsmult_colour_dark,
+        data = concept_efsmult_pdfmax_summary |>
+            mutate(
+                model_type_full = factor(
+                    "Exact Finite Sample Multiple Maxima",
+                    levels = p_ordering
+                )
+            )
+    ) +
+    geom_vline(aes(xintercept = max), lty = "dotted", data = expmax_vlines) +
+    geom_vline(aes(xintercept = max20), data = expmax_vlines, lty = "dashed") +
+    geom_vline(aes(xintercept = max100), data = expmax_vlines, lty = "solid") +
+
+    labs(x = "Body Size (cm)", y = "Density") +
+    scale_fill_identity() +
+    scale_colour_identity() +
+    scale_linetype_identity() +
+    facet_wrap(~model_type_full) +
+    theme_classic(20) +
+    theme(
+        legend.position = "none",
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank()
+    )
 
 # Figure 1 ---------------------------------------------------------------------
 
-ylim_max <-
-    max(c(
-        layer_scales(concept_evt_plot)$y$range$range,
-        layer_scales(concept_efs_plot)$y$range$range,
-        layer_scales(concept_efsmult_plot)$y$range$range
-    ))
+# ylim_max <-
+#     max(c(
+#         layer_scales(plot_fit_summary("evt"))$y$range$range,
+#         layer_scales(plot_fit_summary("efs"))$y$range$range,
+#         layer_scales(plot_fit_summary("efsmult"))$y$range$range
+#     ))
 
 concept_plot <-
     # concept_underlying +
     concept_samples +
-    concept_evt_plot +
-    concept_efs_plot +
-    concept_efsmult_plot +
-    plot_layout(design = "AAA\nBCD", heights = c(2, 5)) +
-    plot_annotation(tag_levels = "A") &
-    ylim(0, ylim_max)
+    plot_spacer() +
+    combined_plot +
+    plot_layout(design = "A\nB\nC", heights = c(2, -0.5, 5)) +
+    plot_annotation(tag_levels = "A")
 
 
 ggsave(
