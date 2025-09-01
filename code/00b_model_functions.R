@@ -144,8 +144,8 @@ parameters {
 
 model {
   // Priors
-  loc ~ normal(100, 50);     // centered around sample mean with wide variance
-  scale ~ lognormal(0, 1);      // ensures positivity, reasonably diffuse
+  loc ~ normal(100, 50)T[1,];     // very wide prior, no less than 1
+  scale ~ lognormal(0, 1);      // ensures positive
   shape ~ normal(0, 0.5);       // shape parameter typically small, centered at 0
 
   // GEV likelihood
@@ -161,29 +161,6 @@ model {
 }"
 }
 
-# stan_code_evt <- {
-#   "data {
-#   int<lower=0> k;           // number of observations
-#   vector[k] x;              // observed maxima values
-# }
-
-# parameters {
-#   real loc;                  // location parameter
-#   real<lower=0> scale;      // scale parameter (must be positive)
-# }
-
-# model {
-#   // Priors
-#   loc ~ normal(mean(x), 10);     // centered around sample mean with wide variance
-#   scale ~ lognormal(0, 1);      // ensures positivity, reasonably diffuse
-
-#   // GEV likelihood
-#   for (i in 1:k) {
-#    real t_i = exp(-(x[i]-loc)/scale);
-#     target += log(1/scale) + (1)*(log(t_i)) - t_i;
-#   }
-# }"
-# }
 
 fit_maxima_model <- function(
   maxima,
@@ -280,95 +257,3 @@ get_posterior <- function(fit) {
 get_summary <- function(fit) {
   fit$summary()
 }
-
-# concept_evt_fit %>%
-#     posterior::as_draws_df() %>%
-#     dplyr::as_tibble() %>%
-#     dplyr::select(-lp__)
-
-# multiple_efs_fit <- function(maxima, gamma_shape, gamma_rate) {
-
-#   mod_results <- fit_maxima_model(maxima, type = "efs", gamma_shape = gamma_shape, gamma_rate = gamma_rate)
-
-#   mod_results$draws %>%
-#     mutate(
-#       max = pmap_dbl(
-#         .l = list(distr = "tnorm", n = length(maxima)*lambda, par1 = mu, par2 = sigma, p = 1-(1/length(maxima))),
-#         .f = inverse_G_x
-#       ),
-#       max20 = pmap_dbl(
-#         .l = list(distr = "tnorm", n = 20*lambda, par1 = mu, par2 = sigma, p = 1-(1/length(maxima))),
-#         .f = inverse_G_x
-#       )
-#     ) %>%
-#     rename_with(~ paste0("est_", .x), setdiff(names(.), c(".chain", ".iteration", ".draw")))
-# }
-
-# multiple_evt_fit <- function(maxima) {
-
-#   mod_results <- fit_maxima_model(maxima, type = "evt")
-
-#   mod_results$draws %>%
-#     mutate(
-#       max = pmap_dbl(
-#         .l = list(k = length(maxima), loc = mu, scale = sigma, shape = xi),
-#         .f = expected_max_evt
-#       ),
-#       max20 = pmap_dbl(
-#         .l = list(k = 20, loc = mu, scale = sigma, shape = xi),
-#         .f = expected_max_evt
-#       )
-#     ) %>%
-#     rename_with(~ paste0("est_", .x), setdiff(names(.), c(".chain", ".iteration", ".draw")))
-# }
-
-# multiple_mod_fits <- function(type, gamma_shape = NULL, gamma_rate = NULL){
-#   simulation_output_filepath <-
-#     if(type == "efs"){
-#       paste0("data/model_output/efs_posterior_scenarios_shape",gamma_shape ,".parquet")
-#     } else {
-#       paste0("data/model_output/evt_posterior_scenarios.parquet")
-#     }
-
-#   if (!file.exists(simulation_output_filepath)) {
-
-#     plan(multisession)
-#     max_posterior_multiple <-
-#       scenarios_maxima |>
-#       nest(maxima_tbl = c(max, n)) %>%
-#       mutate(maxima = map(maxima_tbl, ~ .x$max)) %>%
-#       mutate(out = future_pmap(
-#         .l = list(maxima = maxima),
-#         .f = if(type == "efs") {
-#           function(maxima) multiple_efs_fit(maxima, gamma_shape = gamma_shape, gamma_rate = gamma_rate)
-#         } else {
-#           multiple_evt_fit
-#         },
-#         .options = furrr_options(seed = TRUE,
-#                                  globals = c("ptnorm", "multiple_efs_fit", "fit_maxima_model", "write_stan_file", "stan_code_efs", gamma_rate = gamma_rate,
-#                                                            gamma_shape = gamma_shape, "as_tibble", "as_draws_df", "rename_with", "inverse_G_x", "G_max", "F_x"),
-#                                  packages = c("cmdstanr"))
-#       )) |>
-#       unnest(cols = out) %>%
-#       select(filename, k, contains("est_"))
-#     plan(sequential)
-
-#     arrow::write_parquet(max_posterior_multiple, simulation_output_filepath)
-#   } else {
-#     max_posterior_multiple <- arrow::read_parquet(simulation_output_filepath)
-#   }
-#   return(max_posterior_multiple)
-# }
-
-# summarise_posterior <- function(posterior_tbl){
-#   posterior_tbl %>%
-#     summarise(
-#       max = quantile(est_max, 0.5),
-#       max_lwr = quantile(est_max, 0.025),
-#       max_upr = quantile(est_max, 0.975),
-#       max20 = quantile(est_max20, 0.5),
-#       max20_lwr = quantile(est_max20, 0.025),
-#       max20_upr = quantile(est_max20, 0.975),
-#       .by = filename
-#     )
-# }
