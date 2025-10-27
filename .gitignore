@@ -57,4 +57,11 @@ models/output_data/
 docs/
 
 *.parquet
+
 *.csv
+*.zip
+
+
+
+*.png
+*.rds

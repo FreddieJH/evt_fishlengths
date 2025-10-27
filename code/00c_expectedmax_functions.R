@@ -16,9 +16,23 @@ library(evd)
 
 # Functions --------------------------------------------------------------
 
+# g_max = function(x) n * (F_x(x)^(n - 1)) * f_x(x)
+g_max <- function(x, distr, n, par1, par2, par3 = NULL) {
+  f_x <- get(paste0("d", distr))(x, par1, par2, par3)
+  F_x <- get(paste0("p", distr))(x, par1, par2)
+
+  f_x_clean <- function(x) f_x(x, distr = distr, par1 = par1, par2 = par2)
+  F_x_clean <- function(x) F_x(x, distr = distr, par1 = par1, par2 = par2)
+
+  # using log to avoid problems with very small pdf and cdf values
+  log_f_max <- log(n) + (n - 1) * log(F_x_clean(x)) + log(f_x_clean(x))
+  return(exp(log_f_max))
+}
+
+
 # PDF(x) = f(x) = Pr(X = x)
-f_x <- function(x, distr, par1, par2) {
-  get(paste0("d", distr))(x, par1, par2)
+f_x <- function(x, distr, par1, par2 = NULL, par3 = NULL) {
+  get(paste0("d", distr))(x, par1, par2, par3)
 }
 
 # CDF(x) = F(x) = Pr(X <= x)
@@ -44,6 +58,29 @@ G_max <- function(x, distr, n, par1, par2) {
   return(F_x_clean(x)^n)
 }
 
+# # pdf of maxima (for GEV)
+# gev_pdf <- Vectorize(function(x, loc, scale, shape) {
+#   if (scale <= 0) {
+#     stop("scale parameter must be positive")
+#   }
+#   s = (x - loc) / scale
+#   a = 1 + (shape * s)
+#   if (shape == 0) {
+#     exp(-s) * exp(-exp(-s))
+#   } else if (shape * s > -1) {
+#     (a^-(1 + (1 / shape))) * exp(-a^(-1 / shape))
+#   } else {
+#     0
+#   }
+# })
+
+# G_max_gev <- function(x, loc, scale, shape) {
+#   s = (x - loc) / scale
+#   print(shape * s)
+#   exp(-(pmax((1 + shape * s), 0)^(-1 / shape)))
+#   # exp(-exp(-s))
+# }
+
 # used to calculate the value at a given perentile of the G_max()
 inverse_G_x <- function(
   distr,
@@ -61,8 +98,16 @@ inverse_G_x <- function(
   )$root
 }
 
-# expected value is just x*f(x) where f(x) is the pdf of the max values
+# expected value is just integral of x*g(x) where g(x) is the pdf of the max values
 expected_max <- function(distr, n, par1, par2) {
+  integrand <- function(x) {
+    x * g_max(x, distr = distr, n = n, par1 = par1, par2 = par2)
+  }
+  upper_bound <- get(paste0("q", distr))(0.9999999999999, par1, par2)
+  integrate(integrand, lower = 0, upper = upper_bound, rel.tol = 1e-6)$value
+}
+
+expected_max_gev <- function(distr, n, loc, scale, shape) {
   integrand <- function(x) {
     x * g_max(x, distr = distr, n = n, par1 = par1, par2 = par2)
   }

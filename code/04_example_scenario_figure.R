@@ -31,7 +31,7 @@ scenario1 <-
         dist_mean == scenario1_mean,
         dist_name == "tnorm",
     ) %>%
-    filter(str_detect(filename, "efsmult_shape16"))
+    filter(str_detect(filename, "efsmult_shape16_mu50"))
 
 
 # scenario maxima, list elements for each sample
@@ -49,7 +49,7 @@ scenario1_posterior_max_summary <-
     posteriors_max_summary %>%
     mutate(scenario_id = as.numeric(str_extract(filename, "\\d+$"))) %>%
     filter(scenario_id == unique(scenario1$scenario_id)) |>
-    filter(str_detect(filename, "evt_|shape16"))
+    filter(str_detect(filename, "evt_|shape16_mu50"))
 
 scenario1_posterior_max_summary_evt <-
     scenario1_posterior_max_summary %>%
@@ -57,11 +57,181 @@ scenario1_posterior_max_summary_evt <-
 
 scenario1_posterior_max_summary_efs <-
     scenario1_posterior_max_summary %>%
-    filter(str_detect(filename, "efs_"))
+    filter(str_detect(filename, "efs_shape16_mu50"))
 
 scenario1_posterior_max_summary_efsmult <-
     scenario1_posterior_max_summary %>%
-    filter(str_detect(filename, "efsmult"))
+    filter(str_detect(filename, "efsmult_shape16_mu50"))
+
+evt_posteriors <-
+    posteriors %>%
+    mutate(scenario_id = as.numeric(str_extract(filename, "\\d+$"))) %>%
+    filter(scenario_id == unique(scenario1$scenario_id)) |>
+    filter(str_detect(filename, "evt_"))
+
+evt_posteriors |>
+    summarise(
+        med_loc = quantile(loc, 0.5),
+        med_scale = quantile(scale, 0.5),
+        med_shape = quantile(shape, 0.5),
+        lwr_loc = quantile(loc, 0.1),
+        lwr_scale = quantile(scale, 0.1),
+        lwr_shape = quantile(shape, 0.1),
+        upr_loc = quantile(loc, 0.9),
+        upr_scale = quantile(scale, 0.9),
+        upr_shape = quantile(shape, 0.9)
+    )
+
+evt_posteriors |>
+    mutate(
+        qgev = pmap_dbl(
+            .l = list(p = 0.8, loc = loc, scale = scale, shape = shape),
+            .f = evd::qgev
+        )
+    ) |>
+    summarise(
+        qgev_fit = quantile(qgev, 0.5),
+        qgev_lwr = quantile(qgev, 0.1),
+        qgev_upr = quantile(qgev, 0.9)
+    )
+
+evt_posteriors |>
+    mutate(
+        qgev = pmap_dbl(
+            .l = list(p = 0.95, loc = loc, scale = scale, shape = shape),
+            .f = evd::qgev
+        )
+    ) |>
+    summarise(
+        qgev_fit = quantile(qgev, 0.5),
+        qgev_lwr = quantile(qgev, 0.1),
+        qgev_upr = quantile(qgev, 0.9)
+    )
+
+expected_max_fromsim(
+    "tnorm",
+    n = scenario1_k * scenario1_lambda,
+    mean = scenario1_mean,
+    variance = (scenario1_mean * 0.34)^2
+)
+expected_max_fromsim(
+    "tnorm",
+    n = 20 * scenario1_lambda,
+    mean = scenario1_mean,
+    variance = (scenario1_mean * 0.34)^2
+)
+
+
+efs_posteriors <-
+    posteriors %>%
+    mutate(scenario_id = as.numeric(str_extract(filename, "\\d+$"))) %>%
+    filter(scenario_id == unique(scenario1$scenario_id)) |>
+    filter(str_detect(filename, "efs_shape16_mu50_11"))
+
+efs_posteriors |>
+    summarise(
+        med_mu = quantile(mu, 0.5),
+        med_sigma = quantile(sigma, 0.5),
+        med_lambda = quantile(lambda, 0.5),
+        lwr_mu = quantile(mu, 0.1),
+        lwr_sigma = quantile(sigma, 0.1),
+        lwr_lambda = quantile(lambda, 0.1),
+        upr_mu = quantile(mu, 0.9),
+        upr_sigma = quantile(sigma, 0.9),
+        upr_lambda = quantile(lambda, 0.9)
+    )
+
+efs_posteriors |>
+    mutate(
+        exp_max = pmap_dbl(
+            .l = list(
+                distr = "tnorm",
+                n = scenario1_k * lambda,
+                par1 = mu,
+                par2 = sigma
+            ),
+            .f = expected_max
+        )
+    ) |>
+    summarise(
+        max_fit = quantile(exp_max, 0.5),
+        max_lwr = quantile(exp_max, 0.1),
+        max_upr = quantile(exp_max, 0.9)
+    )
+
+efs_posteriors |>
+    mutate(
+        exp_max = pmap_dbl(
+            .l = list(
+                distr = "tnorm",
+                n = 20 * lambda,
+                par1 = mu,
+                par2 = sigma
+            ),
+            .f = expected_max
+        )
+    ) |>
+    summarise(
+        max_fit = quantile(exp_max, 0.5),
+        max_lwr = quantile(exp_max, 0.1),
+        max_upr = quantile(exp_max, 0.9)
+    )
+
+
+efsmult_posteriors <-
+    posteriors %>%
+    mutate(scenario_id = as.numeric(str_extract(filename, "\\d+$"))) %>%
+    filter(scenario_id == unique(scenario1$scenario_id)) |>
+    filter(str_detect(filename, "efsmult_shape16_mu50_11"))
+
+efsmult_posteriors |>
+    summarise(
+        med_mu = quantile(mu, 0.5),
+        med_sigma = quantile(sigma, 0.5),
+        med_lambda = quantile(lambda, 0.5),
+        lwr_mu = quantile(mu, 0.1),
+        lwr_sigma = quantile(sigma, 0.1),
+        lwr_lambda = quantile(lambda, 0.1),
+        upr_mu = quantile(mu, 0.9),
+        upr_sigma = quantile(sigma, 0.9),
+        upr_lambda = quantile(lambda, 0.9)
+    )
+
+efsmult_posteriors |>
+    mutate(
+        exp_max = pmap_dbl(
+            .l = list(
+                distr = "tnorm",
+                n = scenario1_k * lambda,
+                par1 = mu,
+                par2 = sigma
+            ),
+            .f = expected_max
+        )
+    ) |>
+    summarise(
+        max_fit = quantile(exp_max, 0.5),
+        max_lwr = quantile(exp_max, 0.1),
+        max_upr = quantile(exp_max, 0.9)
+    )
+
+efsmult_posteriors |>
+    mutate(
+        exp_max = pmap_dbl(
+            .l = list(
+                distr = "tnorm",
+                n = 20 * lambda,
+                par1 = mu,
+                par2 = sigma
+            ),
+            .f = expected_max
+        )
+    ) |>
+    summarise(
+        max_fit = quantile(exp_max, 0.5),
+        max_lwr = quantile(exp_max, 0.1),
+        max_upr = quantile(exp_max, 0.9)
+    )
 
 scenario1_evt_cdf_summary_path <- "data/model_summaries/scenario1_evt_cdf_summary3.csv"
 if (!file.exists(scenario1_evt_cdf_summary_path)) {
@@ -79,8 +249,8 @@ if (!file.exists(scenario1_evt_cdf_summary_path)) {
         ) |>
         summarise(
             p_fit = quantile(cdf, 0.5),
-            p_lwr = quantile(cdf, 0.025),
-            p_upr = quantile(cdf, 0.975),
+            p_lwr = quantile(cdf, 0.1),
+            p_upr = quantile(cdf, 0.9),
             .by = size
         )
 
@@ -98,7 +268,7 @@ if (!file.exists(scenario1_efs_summary_path)) {
         posteriors %>%
         mutate(scenario_id = as.numeric(str_extract(filename, "\\d+$"))) %>%
         filter(scenario_id == unique(scenario1$scenario_id)) |>
-        filter(str_detect(filename, "efs_")) |>
+        filter(str_detect(filename, "efs_shape16_mu50")) |>
         expand_grid(size = 0:180) |>
         mutate(
             cdf = pmap_dbl(
@@ -124,11 +294,11 @@ if (!file.exists(scenario1_efs_summary_path)) {
         ) |>
         summarise(
             p_fit = quantile(cdf, 0.5),
-            p_lwr = quantile(cdf, 0.025),
-            p_upr = quantile(cdf, 0.975),
+            p_lwr = quantile(cdf, 0.1),
+            p_upr = quantile(cdf, 0.9),
             p_fit20 = quantile(cdf20, 0.5),
-            p_lwr20 = quantile(cdf20, 0.025),
-            p_upr20 = quantile(cdf20, 0.975),
+            p_lwr20 = quantile(cdf20, 0.1),
+            p_upr20 = quantile(cdf20, 0.9),
             .by = size
         )
 
@@ -146,7 +316,7 @@ if (!file.exists(scenario1_efsmult_summary_path)) {
         posteriors %>%
         mutate(scenario_id = as.numeric(str_extract(filename, "\\d+$"))) %>%
         filter(scenario_id == unique(scenario1$scenario_id)) |>
-        filter(str_detect(filename, "efsmult_")) |>
+        filter(str_detect(filename, "efsmult_shape16_mu50")) |>
         expand_grid(size = 0:180) |>
         mutate(
             cdf = pmap_dbl(
@@ -172,11 +342,11 @@ if (!file.exists(scenario1_efsmult_summary_path)) {
         ) |>
         summarise(
             p_fit = quantile(cdf, 0.5),
-            p_lwr = quantile(cdf, 0.025),
-            p_upr = quantile(cdf, 0.975),
+            p_lwr = quantile(cdf, 0.1),
+            p_upr = quantile(cdf, 0.9),
             p_fit20 = quantile(cdf20, 0.5),
-            p_lwr20 = quantile(cdf20, 0.025),
-            p_upr20 = quantile(cdf20, 0.975),
+            p_lwr20 = quantile(cdf20, 0.1),
+            p_upr20 = quantile(cdf20, 0.9),
             .by = size
         )
 
@@ -274,6 +444,11 @@ p_scenario1_underlying <-
         size = 5
     ) +
     geom_rug(
+        aes(x = unlist(scenario1_maxima)),
+        color = data_colour_nearmax,
+        length = unit(0.5, units = "cm")
+    ) +
+    geom_rug(
         aes(x = unlist(map(scenario1_maxima, max))),
         color = data_colour_ismax,
         length = unit(0.5, units = "cm")
@@ -301,44 +476,70 @@ scenario1_unnest <-
     scenario1_plotting |>
     unnest(top_m)
 
-scenario1_unnest |>
-    mutate(
-        max = max(top_m),
-        near_max = rank(-top_m, ties.method = "max") <= m,
-        .by = j
-    )
+# scenario1_unnest |>
+#     mutate(
+#         max = max(top_m),
+#         near_max = rank(-top_m, ties.method = "max") <= m,
+#         .by = j
+#     )
 
-tibble(
-    sample_id = scenario1_unnest$j,
-    value = scenario1_unnest$top_m,
-    is_max = sample_data == max(sample_data),
-    near_max = rank(-value, ties.method = "max") <= threshold,
-    n = nn, # Store sample size for reference
-    rank = case_when(
-        !is_max & !near_max ~ "low",
-        !is_max & near_max ~ "high",
-        is_max & near_max ~ "highest"
-    )
-)
-
+# tibble(
+#     sample_id = scenario1_unnest$j,
+#     value = scenario1_unnest$top_m,
+#     is_max = sample_data == max(sample_data),
+#     near_max = rank(-value, ties.method = "max") <= threshold,
+#     n = nn, # Store sample size for reference
+#     rank = case_when(
+#         !is_max & !near_max ~ "low",
+#         !is_max & near_max ~ "high",
+#         is_max & near_max ~ "highest"
+#     )
+# )
 
 plot_modfit <- function(type, colour, k = 20) {
     posterior <- get(paste0("scenario1_", type, "_cdf_summary"))
     est_summary <- get(paste0("scenario1_posterior_max_summary_", type))
 
-    scenario1_efs_cdf_summary
-
     est_max20_fit <- est_summary$est_max20_fit
     est_max20_lwr <- est_summary$est_max20_lwr
     est_max20_upr <- est_summary$est_max20_upr
 
-    ggplot(posterior) +
+    pc <- if (type == "evt") {
+        1 - (1 / k)
+    } else {
+        posterior |>
+            mutate(diff = abs(size - est_max20_fit)) |>
+            arrange(diff) |>
+            head(1) |>
+            pull(p_fit20)
+    }
+
+    posterior_out <- if (type == "evt") {
+        posterior
+    } else {
+        posterior |>
+            select(size, p_fit = p_fit20, p_lwr = p_lwr20, p_upr = p_upr20)
+    }
+
+    ggplot(posterior_out) +
         {
             if (type %in% c("efs", "efsmult")) {
                 geom_ribbon(
                     aes(x = size, ymin = p_lwr, ymax = p_upr),
                     fill = colour,
-                    alpha = 0.5
+                    alpha = 0.2,
+                    data = posterior
+                )
+            }
+        } +
+        {
+            if (type %in% c("efs", "efsmult")) {
+                geom_line(
+                    aes(x = size, y = p_fit),
+                    col = colour,
+                    lty = 2,
+                    alpha = 0.5,
+                    data = posterior
                 )
             }
         } +
@@ -350,19 +551,33 @@ plot_modfit <- function(type, colour, k = 20) {
         {
             if (type == "efsmult") {
                 geom_point(
-                    aes(x = top_m, y = plotting_pos, size = n),
+                    aes(x = top_m, y = 0, size = n_scaled),
                     data = scenario1_plotting |>
+                        mutate(n_scaled = (n / 600)^3) |>
                         unnest(top_m) |>
                         filter(top_m != maxima),
                     color = data_colour_nearmax
                 )
             }
         } +
-        geom_point(
-            aes(x = maxima, y = plotting_pos, size = n),
-            data = scenario1_plotting,
-            color = data_colour_ismax
-        ) +
+        {
+            if (type == "evt") {
+                geom_point(
+                    aes(x = maxima, y = plotting_pos, size = n_scaled),
+                    data = scenario1_plotting |> mutate(n_scaled = (n / 600)^3),
+                    color = data_colour_ismax
+                )
+            }
+        } +
+        {
+            if (type != "evt") {
+                geom_point(
+                    aes(x = maxima, y = 0, size = n_scaled),
+                    data = scenario1_plotting |> mutate(n_scaled = (n / 600)^3),
+                    color = data_colour_ismax
+                )
+            }
+        } +
         # geom_rug(
         #     aes(x = unlist(map(scenario1_maxima, max))),
         #     color = "purple",
@@ -372,7 +587,7 @@ plot_modfit <- function(type, colour, k = 20) {
         # ) +
         geom_line(aes(x = size, y = p_fit), col = colour, linewidth = 1.5) +
         geom_errorbarh(
-            aes(xmin = est_max20_lwr, xmax = est_max20_upr, y = 1 - (1 / k)),
+            aes(xmin = est_max20_lwr, xmax = est_max20_upr, y = pc),
             height = 0.03,
             col = "black",
             lty = "solid",
@@ -394,6 +609,7 @@ plot_modfit <- function(type, colour, k = 20) {
             panel.grid.minor = element_blank()
         ) +
         scale_x_continuous(breaks = seq(40, 150, 20), expand = c(0, 1)) +
+        scale_size_identity() +
         coord_cartesian(xlim = c(40, 150))
 }
 
@@ -405,7 +621,9 @@ p_examplefit <-
     p_scenario1_underlying +
     p_scenario1_evt +
     p_scenario1_efs +
+    theme(legend.position = "none") +
     p_scenario1_efsmult +
+    theme(legend.position = "none") +
     plot_layout(ncol = 1, axis_titles = "collect") +
     plot_annotation(tag_levels = "A")
 

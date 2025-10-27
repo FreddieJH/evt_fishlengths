@@ -2,6 +2,10 @@ source("code/01_simulation.R")
 source("code/02_model_fitting.R")
 library(scales)
 library(ggplot2)
+<<<<<<< HEAD
+=======
+library(RColorBrewer)
+>>>>>>> b55011574d45c1f044f6fe8125a070f57829ad7c
 
 problematic_fits <-
     posteriors_summary |>
@@ -134,6 +138,12 @@ selected_scenarios <-
     filter(gamma_mean == 8000, gamma_variance == 1000^2, mu_prior_mean == 50) |>
     pull(filename)
 
+<<<<<<< HEAD
+=======
+
+sel_pal <- brewer.pal(name = "Dark2", n = 3)
+
+>>>>>>> b55011574d45c1f044f6fe8125a070f57829ad7c
 p_comparison <-
     posteriors_max_summary |>
     filter((filename %in% selected_scenarios) | str_detect(filename, "evt")) |>
@@ -152,9 +162,27 @@ p_comparison <-
         pc_error_upr = (true_max - est_max_upr) / true_max
     ) |>
     filter(lambda == 1000) |>
+<<<<<<< HEAD
     ggplot(aes(true_max, pc_error, col = dist_name)) +
     geom_errorbar(aes(ymin = pc_error_lwr, ymax = pc_error_upr)) +
     geom_point(fill = "white", aes(shape = problematic, size = as.factor(k))) +
+=======
+    mutate(
+        fill_col = case_when(
+            problematic ~ "white",
+            dist_name == "gamma" ~ sel_pal[1],
+            dist_name == "lnorm" ~ sel_pal[2],
+            dist_name == "tnorm" ~ sel_pal[3]
+        )
+    ) |>
+    ggplot(aes(true_max, pc_error, col = dist_name)) +
+    geom_errorbar(aes(ymin = pc_error_lwr, ymax = pc_error_upr)) +
+    geom_point(
+        # fill = "white",
+        aes(shape = dist_name, fill = fill_col, size = as.factor(k)),
+        alpha = 1
+    ) +
+>>>>>>> b55011574d45c1f044f6fe8125a070f57829ad7c
     geom_abline(slope = 0, lty = 2) +
     facet_grid(
         scenario_model ~ dist_mean,
@@ -165,7 +193,11 @@ p_comparison <-
                 case_when(
                     x == "evt" ~ "EVT",
                     str_detect(x, "efs_") ~ "EFS",
+<<<<<<< HEAD
                     str_detect(x, "efsmult_") ~ "EFSMult"
+=======
+                    str_detect(x, "efsmult_") ~ "EFSMM"
+>>>>>>> b55011574d45c1f044f6fe8125a070f57829ad7c
                 )
             }
         )
@@ -173,6 +205,7 @@ p_comparison <-
     labs(
         x = "True maximum length (cm)",
         y = "Estimation Error",
+<<<<<<< HEAD
         shape = "Model fitting:",
         col = "Simulation distribution:",
         size = "# samples (k):"
@@ -181,6 +214,16 @@ p_comparison <-
         values = c("TRUE" = 21, "FALSE" = 16),
         label = c("TRUE" = "Not converged", "FALSE" = "Converged")
     ) +
+=======
+        shape = NULL,
+        col = NULL,
+        size = "k ="
+    ) +
+    # scale_shape_manual(
+    #     values = c("TRUE" = 21, "FALSE" = 16),
+    #     label = c("TRUE" = "Not converged", "FALSE" = "Converged")
+    # ) +
+>>>>>>> b55011574d45c1f044f6fe8125a070f57829ad7c
     scale_y_continuous(label = label_percent()) +
     theme_classic(20) +
     theme(
@@ -192,14 +235,39 @@ p_comparison <-
         axis.line = element_blank(),
         legend.position = "bottom"
     ) +
+<<<<<<< HEAD
     scale_color_viridis_d() +
     scale_fill_viridis_d()
+=======
+    scale_color_manual(values = brewer.pal(name = "Dark2", n = 3)) +
+    scale_fill_identity() +
+    scale_shape_manual(values = c(21, 22, 24)) +
+    guides(
+        col = guide_legend(
+            nrow = 1,
+            byrow = TRUE,
+            override.aes = list(size = 5, linewidth = 0)
+        ),
+        size = guide_legend(nrow = 1, byrow = TRUE),
+        shape = guide_legend(
+            nrow = 2,
+            byrow = TRUE,
+            override.aes = list(size = 5)
+        )
+    )
+>>>>>>> b55011574d45c1f044f6fe8125a070f57829ad7c
 p_comparison
 
 ggsave(
     filename = "results/figures/performance.png",
     plot = p_comparison,
+<<<<<<< HEAD
     height = 15,
     width = 20
 )
 palette.colors()
+=======
+    height = 10,
+    width = 10
+)
+>>>>>>> b55011574d45c1f044f6fe8125a070f57829ad7c
