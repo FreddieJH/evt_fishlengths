@@ -36,6 +36,8 @@ The code to produce the results and figures presented in the manuscript are arra
 ├── results/
 │   └── data/    
 |        ├── estmax_posterior.csv  # estimated max and max20 (20-sample maximum) for each scenario
+|        ├── scenarios_truemax.csv  # 
+|        ├── scenarios.csv          # 
 |        └── posterior.parquet     # raw posterior draws (dataframe)
 │   └── figures/    
 │       └── manuscript_figures/ 
@@ -43,33 +45,11 @@ The code to produce the results and figures presented in the manuscript are arra
 |           ├── sensitivity.png
 |           └── snapper.png
 │       └── supplementary_figures/ 
-|           ├── concept.png
-|           ├── sensitivity.png
-|           └── snapper.png  
+|           ├── XX.png
+|           ├── XX.png
+|           └── XX.png  
 │       └── model_checks/  
 |           ├── bayes_check.png
 |           └── traceplots/
 |         
 ```
-
-
-## Instructions for AI
-
-1. Load required packages as specified in the setup section
-2. Follow the analysis steps in order
-3. Each step builds on previous results
-4. Use provided functions in main.qmd:
-   - `gev_fun()` for GEV calculations
-   - `sim_pois_truncnorm()` for simulations
-   - `find_max_x()` for numerical optimization
-
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
-
-## License
-
-[Insert chosen license]
