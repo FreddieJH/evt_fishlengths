@@ -1,96 +1,14 @@
 # make underlying dist fainter in the figure
 # test sensitivity figure with extremely high lambdas (way above prior)
 
-source("code/01_funcs.R")
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(tidyr)
+library(purrr)
+library(magick)
 
-pkgs <- c(
-  "readr",
-  "dplyr",
-  "purrr",
-  "tidyr",
-  "ggplot2",
-  "truncnorm",
-  "evd",
-  "posterior",
-  "scales",
-  "patchwork"
-)
-
-new_pkgs <- pkgs[!(pkgs %in% installed.packages()[, "Package"])]
-if (length(new_pkgs)) {
-  install.packages(new_pkgs)
-}
-
-purrr::walk(pkgs, ~ library(.x, character.only = TRUE))
-rm(pkgs, new_pkgs)
-
-if (!"cmdstanr" %in% installed.packages()) {
-  install.packages(
-    "cmdstanr",
-    repos = c('https://stan-dev.r-universe.dev', getOption("repos"))
-  )
-}
-
-list.files(
-  "data-raw/R",
-  pattern = "\\.R$",
-  full.names = TRUE,
-  ignore.case = TRUE
-) |>
-  purrr::walk(source)
-
-dtnorm <- function(x, mean, sd) {
-  truncnorm::dtruncnorm(x = x, mean = mean, sd = sd, a = 0)
-}
-ptnorm <- function(q, mean, sd) {
-  truncnorm::ptruncnorm(q = q, mean = mean, sd = sd, a = 0)
-}
-qtnorm <- function(p, mean, sd) {
-  truncnorm::qtruncnorm(p = p, mean = mean, sd = sd, a = 0)
-}
-rtnorm <- function(n, mean, sd) {
-  truncnorm::rtruncnorm(n = n, mean = mean, sd = sd, a = 0)
-}
-# modified from the evd package but made vectorised
-dgev <- Vectorize(evd::dgev)
-pdgev <- Vectorize(evd::pgev)
-dgumbel <- Vectorize(evd::dgumbel)
-pgumbel <- Vectorize(evd::pgumbel)
-
-
-# # PDF of maxima given the PDF and CDF of x
-# g_max <- function(x, distr, n, par1, par2) {
-#   f_x <- function(x) get(paste0("d", distr))(x, par1, par2)
-#   F_x <- function(x) get(paste0("p", distr))(x, par1, par2)
-
-#   # using log to avoid problems with very small pdf and cdf values
-#   # g_max = function(x) n * (F_x(x)^(n - 1)) * f_x(x)
-#   log_g_max <- log(n) + (n - 1) * log(F_x(x)) + log(f_x(x))
-#   return(exp(log_g_max))
-# }
-
-# # CDF for maxima
-# G_max <- function(x, distr, n, par1, par2) {
-#   F_x <- function(x) get(paste0("p", distr))(x, par1, par2)
-#   return(F_x(x)^n)
-# }
-
-# # quantile function for maxima
-# inverse_G_x <- function(
-#   distr,
-#   n,
-#   par1,
-#   par2,
-#   p,
-#   interval_lwr = 1,
-#   interval_upr = 1000
-# ) {
-#   uniroot(
-#     function(x) G_max(x, distr = distr, n = n, par1 = par1, par2 = par2) - p,
-#     lower = interval_lwr,
-#     upper = interval_upr
-#   )$root
-# }
+source("R/01_funcs.R")
 
 kg2cm <- function(w, a = 0.04478, b = 2.673) ((w * 1000) / a)^(1 / b)
 
@@ -163,9 +81,9 @@ fit_mod <- function(maxima, model_type) {
   return(fit)
 }
 
-fit1 <- fit_mod(snapper_maxima$max, "evtg")
-fit2 <- fit_mod(snapper_maxima$max, "efs")
-
+fit_evt <- fit_mod(snapper_maxima$max, "evt")
+fit_evtg <- fit_mod(snapper_maxima$max, "evtg")
+fit_efs <- fit_mod(snapper_maxima$max, "efs")
 
 get_posterior <- function(fit) {
   posterior <-
@@ -420,9 +338,10 @@ get_cdf <- function(fit, xmin = 0, xmax = 300, xstep = 1, ci = 0.8) {
 #   theme_classic(20) +
 #   labs(x = "Body size", y = "Cumulative density")
 
-evt_pdf <- get_pdf(fit1)
-efs_pdf <- get_pdf(fit2)
-efs_underlying <- get_underlying(fit2)
+evt_pdf <- get_pdf(fit_evt)
+evtg_pdf <- get_pdf(fit_evtg)
+efs_pdf <- get_pdf(fit_efs)
+efs_underlying <- get_underlying(fit_efs)
 
 p_snapper <-
   evt_pdf |>
@@ -468,8 +387,8 @@ p_snapper <-
 p2_data <-
   tibble(k = c(length(as.list(snapper_maxima$max)), 20)) |>
   mutate(
-    evt = map(.x = k, .f = ~ est_max(fit1, k = .x)),
-    efs = map(.x = k, .f = ~ est_max(fit2, k = .x))
+    evt = map(.x = k, .f = ~ est_max(fit_evtg, k = .x)),
+    efs = map(.x = k, .f = ~ est_max(fit_efs, k = .x))
   )
 
 p_partb <-
@@ -509,7 +428,7 @@ p_partb <-
   theme_classic(20) +
   theme(legend.position = "none")
 
-snapper_img <- magick::image_read("docs/pagrus_aurata_RSS.jpg")
+snapper_img <- magick::image_read("data/pagrus_aurata_RSS.jpg")
 
 img_grob <- grid::rasterGrob(snapper_img, interpolate = TRUE)
 text_grob <- grid::textGrob(
@@ -542,14 +461,14 @@ p_snapper_final <-
 
 
 ggsave(
-  filename = "docs/snapper.png",
+  filename = "results/figures/manuscript_figures/snapper.png",
   plot = p_snapper_final,
-  height = 10,
-  width = 10
+  height = 15,
+  width = 15
 )
 
-get_posterior(fit1)
-get_posterior(fit2) |>
+get_posterior(fit_evt)
+get_posterior(fit_evt) |>
   pivot_longer(cols = c(mu, sigma, lambda)) |>
   summarise(
     fit = quantile(value, 0.5),
@@ -557,7 +476,9 @@ get_posterior(fit2) |>
     upr = quantile(value, 0.9),
     .by = name
   )
-est_max(fit1, k = 14)
-est_max(fit1, k = 20)
-est_max(fit2, k = 14)
-est_max(fit2, k = 20)
+est_max(fit_evt, k = 14)
+est_max(fit_evt, k = 20)
+est_max(fit_evtg, k = 14)
+est_max(fit_evtg, k = 20)
+est_max(fit_efs, k = 14)
+est_max(fit_efs, k = 20)

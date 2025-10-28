@@ -1,6 +1,10 @@
-source("R/00_pkgs.R")
 source("R/01_funcs.R")
-# source("R/calc_dist_pars.R")
+
+library(readr)
+library(tidyr)
+library(dplyr)
+library(purrr)
+
 
 set.seed(1)
 
@@ -11,7 +15,7 @@ set.seed(1)
 # 4. mean = mean of the underlying distribution (10, 50, 100) - note variance is based on mean using a fixed CV of 0.34
 
 # 135 underlying distribution scenarios
-scenarios <-
+scenarios_unnested <-
   expand_grid(
     k = c(5, 10, 50, 100, 200),
     lambda = c(100, 1000, 10000),
@@ -19,8 +23,8 @@ scenarios <-
     dist_mean = c(10, 50, 100)
   ) |>
   mutate(n_k = map2(k, lambda, ~ rpois(.x, .y))) |>
-  unnest(n_k) %>%
-  mutate(m = sample(size = n(), 1:4, replace = TRUE)) %>%
+  unnest(n_k) |>
+  mutate(m = sample(size = n(), 1:4, replace = TRUE)) |>
   mutate(
     rsample = pmap(
       .l = list(dist_name, dist_mean, n_k),
@@ -37,5 +41,9 @@ scenarios <-
     )
   ) |>
   nest(.by = c(k, lambda, dist_name, dist_mean), .key = "samples") |>
-  mutate(scenario_id = row_number())
+  mutate(scenario_id = row_number()) |>
+  unnest(samples) |>
+  unnest(topm) |>
+  select(-rsample)
 
+write_csv(scenarios_unnested, "results/data/scenarios.csv")

@@ -1,5 +1,5 @@
-# Script requirements  --------------------------------------------------------------
-source("R/01_funcs.R")
+library(arrow)
+
 source("R/04_model_prep.R")
 
 init_func <- function(model_id, maxima_median) {
@@ -37,12 +37,11 @@ if (!"cmdstanr" %in% installed.packages()) {
   )
 }
 
-if (!file.exists("data/posterior.parquet")) {
-  efs_mod <- cmdstanr::cmdstan_model("models/efs.stan")
+efs_mod <- cmdstanr::cmdstan_model("models/efs.stan")
   evt_mod <- cmdstanr::cmdstan_model("models/evt.stan")
   evt_gumbel_mod <- cmdstanr::cmdstan_model("models/evt_gumbel.stan")
 
-  if (!file.exists("data/results_single.parquet")) {
+
     future::plan(multisession)
     results_single <-
       scenarios_stan |>
@@ -81,15 +80,7 @@ if (!file.exists("data/posterior.parquet")) {
       pivot_longer(-c(.chain, .iteration, .draw), names_to = "par"))
   ) %>%
   unnest(fit)
-    future::plan(sequential)
 
-    write_parquet(results_single, "data/results_single.parquet")
-  } else {
-    results_single <- read_parquet("data/results_single.parquet")
-  }
-
-  if (!file.exists("data/results_multpl.parquet")) {
-    future::plan(multisession)
     results_multpl <-
       scenarios_stan |>
       select(scenario_id, stan_list_multpl) |>
@@ -125,19 +116,14 @@ if (!file.exists("data/posterior.parquet")) {
       pivot_longer(-c(.chain, .iteration, .draw), names_to = "par"))
   ) %>%
   unnest(fit)
-    future::plan(sequential)
 
-    write_parquet(results_multpl, "data/results_multpl.parquet")
-          } else {
-    results_multpl <- read_parquet("data/results_multpl.parquet")
-  }
+    future::plan(sequential)
 
   posterior <-
     bind_rows(
-      read_parquet("data/results_single.parquet"),
-      read_parquet("data/results_multpl.parquet")
+      read_parquet(results_single),
+      read_parquet(results_multpl)
     )
-  write_parquet(posterior, "data/posterior.parquet")
-} else {
-  posterior <- read_parquet("data/posterior.parquet")
-}
+
+  write_parquet(posterior, "results/data/posterior.parquet")
+

@@ -1,67 +1,57 @@
 # Maximum Length Estimation for Fish Species
 
-This repository contains code for estimating maximum body lengths of fish species using Extreme Value Theory (EVT) and numerical methods.
+This repository contains code for estimating maximum body lengths of fish species using Extreme Value Theory (EVT) and and Exact-finite Sampling (EFS) approach.
 
 ## Overview
 
 We use two main approaches to estimate maximum fish lengths:
-1. Extreme Value Theory (EVT) using the Generalized Extreme Value (GEV) distribution
-2. Numerical estimation using Bayesian inference
+1. Extreme Value Theory (EVT) using either the Generalized Extreme Value (GEV) or Gumbel distribution
+2. Using Bayesian inference with some knowledge about the underlying distribution, which we term Exact Finite Sample (EFS) approach
 
-## Setup
 
-### Required R Packages
-```r
-install.packages(c(
-  "tidyverse",  # For data manipulation and visualization
-  "evd",        # For extreme value distributions
-  "patchwork",  # For combining plots
-  "geomtextpath", # For text on paths in plots
-  "multidplyr", # For parallel processing
-  "furrr",      # For parallel processing
-  "cmdstanr",   # For Bayesian inference
-  "posterior",  # For handling MCMC output
-  "truncnorm"   # For truncated normal distributions
-))
-```
-
-## Analysis Steps
-
-### 1. Simulated data
-- Simulate maxima from truncated normal distributions using the `sim_pois_truncnorm()` function
-
-### 2. EVT Approach
-- Fit GEV distribution to sample maxima
-- Estimate maximum length using EVT quantiles
-- Code location: See `estimate-lmax` chunk
-
-### 3. Numerical Estimation
-- Use Bayesian model to estimate underlying distribution parameters
-- Calculate maximum length using numerical optimization
-- Code location: See Stan model in `models/max_est.stan`
-
-### 4. Real Data Application
-- Apply both methods to snapper (Pagrus auratus) data
-- Compare EVT and numerical approaches
-- Code location: See sections "Applying EVT to real data" and "Numerical estimation - real data"
+The benefit of the EFS approach is that we can easily incorporate more than 
 
 ## File Structure
+
+The code to produce the results and figures presented in the manuscript are arranged as follows:
+
 ```
 .
-├── README.md           # This file
-├── main.qmd           # Main analysis document
 ├── models/
-│   └── max_est.stan   # Stan model for numerical estimation
-├── output/
-│   ├── data/          # Processed data
-│   ├── figures/       # Generated plots
-│   └── simulated_data/# Simulation results
+|   ├── efs.stan               # Exact finite sample Stan model
+|   ├── evt.stan               # Extreme value theory (GEV distribution) Stan model
+|   └── evt_gumbel.stan        # Extreme value theory (Gumbel distribution) Stan model
 ├── R/
-│   ├── simulation/    # simulate data
-│   ├── evt/            # functions to fit evt to data
-│   ├── numerical/    # functions to fit numerical model to data
-│   └── plotting/    # functions for plotting data
+│   ├── 00_pkgs.R              # packages to be used in the analysis
+│   ├── 01_funcs.R             # custom functions used in the analysis
+│   ├── 02_simulation.R        # simulate data (to be used in the sensitivity and concept plots)
+│   ├── 03_truemax.R           # calculate the 'true' maximum for each simulation
+|   ├── 04_model_prep.R        # prepare simulation data for model fitting
+|   ├── 05_model_fitting.R     # model fitting of simulated data
+|   ├── 06_model_checks.R      # check the fitting proceedure has performed correctly
+|   ├── 07_posteriors.R        # extract and summarise fitted model posteriors
+|   ├── 08_concept_plot.R      # plot showing the concept of the approaches
+|   ├── 09_sensitivity_plot.R  # plot showing the sensitivity to various simulation parameters
+|   └── 10_snapper_plot.R      # plot of case-study example (Australasian Snapper)
+├── results/
+│   └── data/    
+|        ├── estmax_posterior.csv  # estimated max and max20 (20-sample maximum) for each scenario
+|        └── posterior.parquet     # raw posterior draws (dataframe)
+│   └── figures/    
+│       └── manuscript_figures/ 
+|           ├── concept.png
+|           ├── sensitivity.png
+|           └── snapper.png
+│       └── supplementary_figures/ 
+|           ├── concept.png
+|           ├── sensitivity.png
+|           └── snapper.png  
+│       └── model_checks/  
+|           ├── bayes_check.png
+|           └── traceplots/
+|         
 ```
+
 
 ## Instructions for AI
 

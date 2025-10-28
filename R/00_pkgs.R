@@ -19,7 +19,8 @@ pkgs <- c(
   "ggplot2",
   "patchwork",
   "scales",
-  "RColorBrewer"
+  "RColorBrewer",
+  "magick"
 )
 
 new_pkgs <- pkgs[!(pkgs %in% installed.packages()[, "Package"])]

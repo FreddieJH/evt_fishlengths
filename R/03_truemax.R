@@ -1,6 +1,21 @@
 source("R/01_funcs.R")
-source("R/02_simulation.R")
 
+library(readr)
+library(tidyr)
+library(dplyr)
+library(purrr)
+
+if (!exists("scenarios")) {
+  scenarios <-
+    read_csv("results/data/scenarios.csv", show_col_types = FALSE) |>
+    nest(data = topm) |>
+    mutate(topm = map(data, \(x) as.numeric(x$topm))) |>
+    select(-data) |>
+    nest(
+      .by = c(k, lambda, dist_name, dist_mean, scenario_id),
+      .key = "samples"
+    )
+}
 
 scenarios_truemax <-
   scenarios |>
@@ -26,3 +41,5 @@ scenarios_truemax <-
       }
     )
   )
+
+write_csv(scenarios_truemax, "results/data/scenarios_truemax.csv")

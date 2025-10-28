@@ -1,4 +1,19 @@
-source("R/02_simulation.R")
+library(readr)
+library(dplyr)
+library(purrr)
+library(tidyr)
+
+if (!exists("scenarios")) {
+  scenarios <-
+    read_csv("results/data/scenarios.csv", show_col_types = FALSE) |>
+    nest(data = topm) |>
+    mutate(topm = map(data, \(x) as.numeric(x$topm))) |>
+    select(-data) |>
+    nest(
+      .by = c(k, lambda, dist_name, dist_mean, scenario_id),
+      .key = "samples"
+    )
+}
 
 get_start_id <- function(vec) lag(c(0, cumsum(vec)))[-1] + 1
 
@@ -23,9 +38,9 @@ get_stan_data <- function(k, data, multiple = FALSE) {
 }
 
 scenarios_stan <-
-  scenarios %>%
+  scenarios |>
   mutate(maxima_median = map_dbl(samples, ~ median(.x$top1))) |>
-  mutate(stan_list_single = map2(.x = k, .y = samples, .f = get_stan_data)) %>%
+  mutate(stan_list_single = map2(.x = k, .y = samples, .f = get_stan_data)) |>
   mutate(
     stan_list_multpl = map2(
       .x = k,

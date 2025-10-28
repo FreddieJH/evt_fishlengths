@@ -1,10 +1,11 @@
-list.files(
-  "data-raw/R",
-  pattern = "\\.R$",
-  full.names = TRUE,
-  ignore.case = TRUE
-) |>
-  purrr::walk(source)
+library(truncnorm)
+library(evd)
+library(checkmate)
+library(posterior)
+library(purrr)
+library(cmdstanr)
+library(RColorBrewer)
+
 
 dtnorm <- function(x, mean, sd) {
   truncnorm::dtruncnorm(x = x, mean = mean, sd = sd, a = 0)
@@ -18,18 +19,16 @@ qtnorm <- function(p, mean, sd) {
 rtnorm <- function(n, mean, sd) {
   truncnorm::rtruncnorm(n = n, mean = mean, sd = sd, a = 0)
 }
+
 # modified from the evd package but made vectorised
-dgev <- Vectorize(evd::dgev)
-pdgev <- Vectorize(evd::pgev)
-dgumbel <- Vectorize(evd::dgumbel)
-pgumbel <- Vectorize(evd::pgumbel)
-
-
-
+dgev_v <- function(...) Vectorize(evd::dgev(...))
+pdgev_v <- function(...) Vectorize(evd::pgev(...))
+dgumbel_v <- function(...) Vectorize(evd::dgumbel(...))
+pgumbel_v <- function(...) Vectorize(evd::pgumbel(...))
 
 # Function: given distribution mean and variance, what are the parameter values
 get_dist_pars <- function(distr, mean) {
-  variance = (mean*0.34)^2
+  variance = (mean * 0.34)^2
   switch(
     distr,
     gamma = c((mean^2) / variance, mean / variance),
@@ -67,6 +66,11 @@ mode_f <- function(f, lwr = -500, upr = 500) {
 # PDF of the maxima
 g <- function(x, n, cdf, pdf) {
   n * cdf(x)^(n - 1) * pdf(x)
+}
+
+# CDF of the maxima
+G <- function(x, n, cdf) {
+  cdf(x)^n
 }
 
 

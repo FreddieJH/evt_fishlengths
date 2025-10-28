@@ -1,192 +1,164 @@
-# Script requirements  --------------------------------------------------------------
+library(readr)
+library(arrow)
+library(future)
+library(furrr)
+library(dplyr)
+library(tidyr)
 
-# source("code/00_pkgs.R")
-# source("code/01_funcs.R")
-# source("code/03_truemax.R")
-source("code/04_model_fitting.R")
+if (!exists("scenarios_truemax")) {
+  scenarios_truemax <- read_csv(
+    "results/data/scenarios_truemax.csv",
+    show_col_types = FALSE
+  )
+}
 
+if (!exists("posterior")) {
+  posterior <- read_parquet("results/data/posterior.parquet")
+}
 
-posterior |>
+# EVT (GEV) METHOD
+plan(multisession)
+evt_ests <-
+  posterior |>
   filter(model_id == "evt") |>
   pivot_wider(names_from = par, values_from = value) |>
   left_join(scenarios_truemax |> select(-samples), by = "scenario_id") |>
-  filter(scenario_id == 10) |>
-  expand_grid(
-    x = seq(concept_popln_mean * 0.8, concept_popln_mean * 3, by = 0.1)
+  mutate(
+    est_max20 = future_pmap_dbl(
+      .l = list(loc, scale, shape),
+      .f = \(loc, scale, shape) {
+        qgev(p = 0.95, loc = loc, scale = scale, shape = shape)
+      }
+    ),
+    est_max = future_pmap_dbl(
+      .l = list(loc, scale, shape, k),
+      .f = \(loc, scale, shape, k) {
+        qgev(p = 1 - (1 / k), loc = loc, scale = scale, shape = shape)
+      }
+    )
+  ) |>
+  summarise(
+    est_max20_lwr = quantile(est_max20, 0.1),
+    est_max20_fit = quantile(est_max20, 0.5),
+    est_max20_upr = quantile(est_max20, 0.9),
+    est_max_lwr = quantile(est_max, 0.1),
+    est_max_fit = quantile(est_max, 0.5),
+    est_max_upr = quantile(est_max, 0.9),
+    .by = c(scenario_id, model_id)
+  )
+
+# EVT (GUMBEL) METHOD
+evtg_ests <-
+  posterior |>
+  filter(model_id == "evtg") |>
+  pivot_wider(names_from = par, values_from = value) |>
+  left_join(scenarios_truemax |> select(-samples), by = "scenario_id") |>
+  mutate(
+    est_max20 = future_pmap_dbl(
+      .l = list(loc, scale),
+      .f = \(loc, scale) {
+        qgumbel(p = 0.95, loc = loc, scale = scale)
+      }
+    ),
+    est_max = future_pmap_dbl(
+      .l = list(loc, scale, k),
+      .f = \(loc, scale, k) {
+        qgumbel(p = 1 - (1 / k), loc = loc, scale = scale)
+      }
+    )
+  ) |>
+  summarise(
+    est_max20_lwr = quantile(est_max20, 0.1),
+    est_max20_fit = quantile(est_max20, 0.5),
+    est_max20_upr = quantile(est_max20, 0.9),
+    est_max_lwr = quantile(est_max, 0.1),
+    est_max_fit = quantile(est_max, 0.5),
+    est_max_upr = quantile(est_max, 0.9),
+    .by = c(scenario_id, model_id)
+  )
+
+# EFS METHOD
+efs_ests <-
+  posterior |>
+  filter(model_id %in% c("efs", "efsm")) |>
+  pivot_wider(names_from = par, values_from = value) |>
+  left_join(
+    scenarios_truemax |> select(-c(samples, lambda)),
+    by = "scenario_id"
   ) |>
   mutate(
-    pdf = pmap_dbl(
-      .l = list(x = x, loc = loc, scale = scale, shape = shape),
-      .f = dgev
+    est_max = future_pmap_dbl(
+      .l = list(mu, sigma, lambda, k),
+      .f = \(mu, sigma, lambda, k) {
+        cdf <- \(x) {
+          ptnorm(q = x, mean = mu, sd = sigma)
+        }
+        pdf <- \(x) {
+          dtnorm(x = x, mean = mu, sd = sigma)
+        }
+        gmax <- \(x) {
+          g(x = x, n = lambda * k, cdf = cdf, pdf = pdf)
+        }
+        mode_f(gmax)
+      }
     ),
-    cdf = pmap_dbl(
-      .l = list(q = x, loc = loc, scale = scale, shape = shape),
-      .f = pgev
+    est_max20 = future_pmap_dbl(
+      .l = list(mu, sigma, lambda, k),
+      .f = \(mu, sigma, lambda, k) {
+        cdf <- \(x) {
+          ptnorm(q = x, mean = mu, sd = sigma)
+        }
+        pdf <- \(x) {
+          dtnorm(x = x, mean = mu, sd = sigma)
+        }
+        gmax <- \(x) {
+          g(x = x, n = lambda * 20, cdf = cdf, pdf = pdf)
+        }
+        mode_f(gmax)
+      }
     )
-  )
-
-xx |>
-  summarise(
-    pdf_lwr = quantile(pdf, 0.1),
-    pdf_fit = quantile(pdf, 0.5),
-    pdf_upr = quantile(pdf, 0.9),
-    cdf_lwr = quantile(cdf, 0.1),
-    cdf_fit = quantile(cdf, 0.5),
-    cdf_upr = quantile(cdf, 0.9),
-    .by = c(x)
-  )
-
-
-if (!file.exists("data/estmax_posterior.csv")) {
-  # EVT METHOD
-  plan(multisession)
-  evt_ests <-
-    posterior |>
-    filter(model_id == "evt") |>
-    pivot_wider(names_from = par, values_from = value) |>
-    left_join(scenarios_truemax |> select(-samples), by = "scenario_id") |>
-    mutate(
-      est_max20 = future_pmap_dbl(
-        .l = list(loc, scale, shape),
-        .f = \(loc, scale, shape) {
-          qgev(p = 0.95, loc = loc, scale = scale, shape = shape)
-        }
-      ),
-      est_max = future_pmap_dbl(
-        .l = list(loc, scale, shape, k),
-        .f = \(loc, scale, shape, k) {
-          qgev(p = 1 - (1 / k), loc = loc, scale = scale, shape = shape)
-        }
-      )
-    ) |>
-    summarise(
-      est_max20_lwr = quantile(est_max20, 0.1),
-      est_max20_fit = quantile(est_max20, 0.5),
-      est_max20_upr = quantile(est_max20, 0.9),
-      est_max_lwr = quantile(est_max, 0.1),
-      est_max_fit = quantile(est_max, 0.5),
-      est_max_upr = quantile(est_max, 0.9),
-      .by = c(scenario_id, model_id)
-    )
-  plan(sequential)
-  # EVT (GUMBEL) METHOD
-  plan(multisession)
-  evtg_ests <-
-    posterior |>
-    filter(model_id == "evtg") |>
-    pivot_wider(names_from = par, values_from = value) |>
-    left_join(scenarios_truemax |> select(-samples), by = "scenario_id") |>
-    mutate(
-      est_max20 = future_pmap_dbl(
-        .l = list(loc, scale),
-        .f = \(loc, scale) {
-          qgumbel(p = 0.95, loc = loc, scale = scale)
-        }
-      ),
-      est_max = future_pmap_dbl(
-        .l = list(loc, scale, k),
-        .f = \(loc, scale, k) {
-          qgumbel(p = 1 - (1 / k), loc = loc, scale = scale)
-        }
-      )
-    ) |>
-    summarise(
-      est_max20_lwr = quantile(est_max20, 0.1),
-      est_max20_fit = quantile(est_max20, 0.5),
-      est_max20_upr = quantile(est_max20, 0.9),
-      est_max_lwr = quantile(est_max, 0.1),
-      est_max_fit = quantile(est_max, 0.5),
-      est_max_upr = quantile(est_max, 0.9),
-      .by = c(scenario_id, model_id)
-    )
-  plan(sequential)
-
-  # EFS METHOD
-  plan(multisession)
-  efs_ests <-
-    posterior |>
-    filter(model_id %in% c("efs", "efsm")) |>
-    pivot_wider(names_from = par, values_from = value) |>
-    left_join(
-      scenarios_truemax |> select(-c(samples, lambda)),
-      by = "scenario_id"
-    ) |>
-    mutate(
-      est_max = future_pmap_dbl(
-        .l = list(mu, sigma, lambda, k),
-        .f = \(mu, sigma, lambda, k) {
-          cdf <- \(x) {
-            ptnorm(q = x, mean = mu, sd = sigma)
-          }
-          pdf <- \(x) {
-            dtnorm(x = x, mean = mu, sd = sigma)
-          }
-          gmax <- \(x) {
-            g(x = x, n = lambda * k, cdf = cdf, pdf = pdf)
-          }
-          mode_f(gmax)
-        }
-      ),
-      est_max20 = future_pmap_dbl(
-        .l = list(mu, sigma, lambda, k),
-        .f = \(mu, sigma, lambda, k) {
-          cdf <- \(x) {
-            ptnorm(q = x, mean = mu, sd = sigma)
-          }
-          pdf <- \(x) {
-            dtnorm(x = x, mean = mu, sd = sigma)
-          }
-          gmax <- \(x) {
-            g(x = x, n = lambda * 20, cdf = cdf, pdf = pdf)
-          }
-          mode_f(gmax)
-        }
-      )
-    ) |>
-    summarise(
-      est_max_lwr = quantile(est_max, 0.1),
-      est_max_fit = quantile(est_max, 0.5),
-      est_max_upr = quantile(est_max, 0.9),
-      est_max20_lwr = quantile(est_max20, 0.1),
-      est_max20_fit = quantile(est_max20, 0.5),
-      est_max20_upr = quantile(est_max20, 0.9),
-      .by = c(scenario_id, model_id)
-    )
-  plan(sequential)
-
-  estmax_posterior <-
-    bind_rows(evt_ests, evtg_ests, efs_ests)
-
-  write_csv(estmax_posterior, "data/estmax_posterior.csv")
-} else {
-  estmax_posterior <- read_csv("data/estmax_posterior.csv")
-}
-
-p_estmax <-
-  estmax_posterior |>
-  pivot_longer(
-    cols = starts_with("est_"),
-    names_to = c("source", ".value"),
-    names_pattern = "est_(max20|max)_(.*)"
   ) |>
-  ggplot(aes(x, fit)) +
-  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = model_id), alpha = 0.3) +
-  geom_path(aes(col = type)) +
-  facet_wrap(
-    . ~ type_full,
-    scales = "free",
-  ) +
-  scale_fill_manual(
-    values = c("evt" = evt_colour, "efs" = efs_colour, "efsm" = efsm_colour),
-    labels = c("evt" = "EVT", "efs" = "EFS", "efsm" = "EFSMM")
-  ) +
-  scale_colour_manual(
-    values = c("evt" = evt_colour, "efs" = efs_colour, "efsm" = efsm_colour),
-    labels = c("evt" = "EVT", "efs" = "EFS", "efsm" = "EFSMM")
-  ) +
-  labs(x = "Size (cm)", y = "Density", fill = NULL, col = NULL) +
-  theme_classic(20) +
-  theme(legend.position = "bottom")
+  summarise(
+    est_max_lwr = quantile(est_max, 0.1),
+    est_max_fit = quantile(est_max, 0.5),
+    est_max_upr = quantile(est_max, 0.9),
+    est_max20_lwr = quantile(est_max20, 0.1),
+    est_max20_fit = quantile(est_max20, 0.5),
+    est_max20_upr = quantile(est_max20, 0.9),
+    .by = c(scenario_id, model_id)
+  )
+plan(sequential)
+
+estmax_posterior <-
+  bind_rows(evt_ests, evtg_ests, efs_ests)
+
+write_csv(estmax_posterior, "results/data/estmax_posterior.csv")
+
+# p_estmax <-
+#   estmax_posterior |>
+#   pivot_longer(
+#     cols = starts_with("est_"),
+#     names_to = c("source", ".value"),
+#     names_pattern = "est_(max20|max)_(.*)"
+#   ) |>
+#   ggplot(aes(x, fit)) +
+#   geom_ribbon(aes(ymin = lwr, ymax = upr, fill = model_id), alpha = 0.3) +
+#   geom_path(aes(col = type)) +
+#   facet_wrap(
+#     . ~ type_full,
+#     scales = "free",
+#   ) +
+#   scale_fill_manual(
+#     values = c("evt" = evt_colour, "efs" = efs_colour, "efsm" = efsm_colour),
+#     labels = c("evt" = "EVT", "efs" = "EFS", "efsm" = "EFSMM")
+#   ) +
+#   scale_colour_manual(
+#     values = c("evt" = evt_colour, "efs" = efs_colour, "efsm" = efsm_colour),
+#     labels = c("evt" = "EVT", "efs" = "EFS", "efsm" = "EFSMM")
+#   ) +
+#   labs(x = "Size (cm)", y = "Density", fill = NULL, col = NULL) +
+#   theme_classic(20) +
+#   theme(legend.position = "bottom")
 
 # # Calculate the PDF and CDF of maxima at size X
 # if (!file.exists("data/estmax_posteriors.rds")) {

@@ -1,5 +1,23 @@
-source("code/03_truemax.R")
-source("code/06_posteriors.R")
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(forcats)
+library(scales)
+
+if (!exists("estmax_posterior")) {
+  estmax_posterior <- read_csv(
+    "results/data/estmax_posterior.csv",
+    show_col_types = FALSE
+  )
+}
+
+if (!exists("scenarios_truemax")) {
+  scenarios_truemax <- read_csv(
+    "results/data/scenarios_truemax.csv",
+    show_col_types = FALSE
+  )
+}
+
 
 bias_summary <-
   estmax_posterior |>
@@ -110,8 +128,8 @@ p_comparison <-
   )
 
 ggsave(
-  filename = "docs/performance_1000.png",
+  filename = "results/figures/manuscript_figures/sensitivity.png",
   plot = p_comparison,
-  height = 10,
-  width = 10
+  height = 15,
+  width = 15
 )
