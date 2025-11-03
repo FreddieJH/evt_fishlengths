@@ -4,6 +4,9 @@ library(future)
 library(furrr)
 
 if (!exists("posterior")) {
+  if (!file.exists("results/data/posterior.parquet")) {
+    source("R/05_model_fitting.R")
+  }
   posterior <- read_parquet("results/data/posterior.parquet")
 }
 

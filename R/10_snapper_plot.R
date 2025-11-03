@@ -7,6 +7,8 @@ library(ggplot2)
 library(tidyr)
 library(purrr)
 library(magick)
+library(scales)
+library(patchwork)
 
 source("R/01_funcs.R")
 
@@ -116,13 +118,13 @@ traceplot <- function(fit) {
   return(plot)
 }
 
-est_max <- function(fit, ci = 0.8, k) {
+est_max_posterior <- function(fit, ci = 0.8, k) {
   is_evt <- sum(c("loc", "scale", "shape") %in% colnames(get_posterior(fit))) ==
     3
   is_evtg <- sum(c("loc", "scale") %in% colnames(get_posterior(fit))) == 2
   get_posterior(fit) |>
     mutate(
-      pdf = if (is_evt) {
+      estmax = if (is_evt) {
         pmap_dbl(
           .l = list(
             p = 1 - (1 / k),
@@ -158,14 +160,19 @@ est_max <- function(fit, ci = 0.8, k) {
           }
         )
       }
-    ) |>
+    )
+}
+
+est_max <- function(fit, ci = 0.8, k) {
+  est_max_posterior(fit = fit, ci = ci, k = k) |>
     summarise(
-      max_fit = mean(pdf),
-      max_lwr = quantile(pdf, (1 - ci) / 2),
-      max_upr = quantile(pdf, 1 - ((1 - ci) / 2)),
+      max_fit = mean(estmax),
+      max_lwr = quantile(estmax, (1 - ci) / 2),
+      max_upr = quantile(estmax, 1 - ((1 - ci) / 2)),
     ) %>%
     as.numeric()
 }
+
 
 get_pdf <- function(
   fit,
@@ -384,15 +391,20 @@ p_snapper <-
   labs(x = "Body size", y = "Probability density") +
   theme_classic(20)
 
+
 p2_data <-
+  tibble(k = c(length(as.list(snapper_maxima$max)), 20)) |>
+  mutate(
+    evt = map(.x = k, .f = ~ est_max_posterior(fit_evtg, k = .x)$estmax),
+    efs = map(.x = k, .f = ~ est_max_posterior(fit_efs, k = .x)$estmax)
+  )
+
+p2_data_summary <-
   tibble(k = c(length(as.list(snapper_maxima$max)), 20)) |>
   mutate(
     evt = map(.x = k, .f = ~ est_max(fit_evtg, k = .x)),
     efs = map(.x = k, .f = ~ est_max(fit_efs, k = .x))
-  )
-
-p_partb <-
-  p2_data |>
+  ) |>
   unnest(cols = c(evt, efs)) |>
   mutate(pred = rep(c("fit", "lwr", "upr"), 2)) |>
   pivot_longer(cols = evt:efs) |>
@@ -404,19 +416,40 @@ p_partb <-
       levels = c("efs20", "efs14", "evt20", "evt14"),
       ordered = TRUE,
     )
-  ) |>
-  ggplot(aes(x = fit, y = fact, col = name, linewidth = as.factor(k))) +
-  geom_vline(xintercept = 130, lty = 2, col = "grey70") +
-  geom_point(size = 5) +
-  geom_errorbarh(aes(xmin = lwr, xmax = upr), height = 0) +
+  )
 
-  labs(y = NULL, x = expression(paste("Estimated ", L[max]))) +
+
+p_partb <-
+  p2_data |>
+  unnest(cols = c(evt, efs)) |>
+  pivot_longer(cols = evt:efs) |>
+  mutate(fact = paste0(name, k)) |>
+  mutate(
+    fact = factor(
+      fact,
+      levels = c("efs20", "efs14", "evt20", "evt14"),
+      ordered = TRUE,
+    )
+  ) |>
+  ggplot(aes(x = fact, y = value, fill = name)) +
+  geom_hline(yintercept = 130, lty = 2, col = "grey70") +
+  coord_flip() +
+  see::geom_violinhalf() +
+  geom_errorbar(
+    aes(x = fact, ymin = lwr, ymax = upr),
+    width = 0,
+    data = p2_data_summary,
+    inherit.aes = FALSE,
+    linewidth = 2
+  ) +
+  geom_point(aes(y = fit), data = p2_data_summary, size = 4) +
+  labs(x = NULL, y = expression(paste("Estimated ", L[max]))) +
   scale_linewidth_manual(values = c(`14` = 1, `20` = 3)) +
-  scale_x_continuous(
+  scale_y_continuous(
     labels = label_number(suffix = "cm"),
     limits = layer_scales(p_snapper)$x$range$range
   ) +
-  scale_y_discrete(
+  scale_x_discrete(
     labels = c(
       "evt14" = "EVT (k = 14)",
       "evt20" = "EVT (k = 20)",
@@ -424,15 +457,15 @@ p_partb <-
       "efs20" = "EFS (k = 20)"
     )
   ) +
-  scale_color_manual(values = c("evt" = evt_colour, "efs" = efs_colour)) +
+  scale_fill_manual(values = c("evt" = evt_colour, "efs" = efs_colour)) +
   theme_classic(20) +
   theme(legend.position = "none")
 
-snapper_img <- magick::image_read("data/pagrus_aurata_RSS.jpg")
+snapper_img <- magick::image_read("data/snapper.png")
 
 img_grob <- grid::rasterGrob(snapper_img, interpolate = TRUE)
 text_grob <- grid::textGrob(
-  "Chrysophrys aurata",
+  "Chrysophrys auratus",
   gp = grid::gpar(fontsize = 15, fontface = "italic")
 )
 
@@ -441,14 +474,14 @@ p_snapper_img <-
   annotation_custom(
     img_grob,
     xmin = 0,
-    xmax = 50,
+    xmax = 70,
     ymin = layer_scales(p_snapper)$y$range$range[2] * 0.7, # Start at 70% of max y-value
     ymax = layer_scales(p_snapper)$y$range$range[2] # End at max y-value (top)
   ) +
   annotation_custom(
     text_grob,
     xmin = 0,
-    xmax = 50,
+    xmax = 70,
     ymin = layer_scales(p_snapper)$y$range$range[2] * 0.68, # Just below image
     ymax = layer_scales(p_snapper)$y$range$range[2] * 0.7 # Up to image start
   )
@@ -463,8 +496,8 @@ p_snapper_final <-
 ggsave(
   filename = "results/figures/manuscript_figures/snapper.png",
   plot = p_snapper_final,
-  height = 15,
-  width = 15
+  height = 12,
+  width = 12
 )
 
 get_posterior(fit_evt)

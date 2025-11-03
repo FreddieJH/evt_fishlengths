@@ -6,6 +6,9 @@ library(dplyr)
 library(tidyr)
 
 if (!exists("scenarios_truemax")) {
+  if (!file.exists("results/data/scenarios_truemax.csv")) {
+    source("R/03_truemax.R")
+  }
   scenarios_truemax <- read_csv(
     "results/data/scenarios_truemax.csv",
     show_col_types = FALSE
@@ -13,6 +16,9 @@ if (!exists("scenarios_truemax")) {
 }
 
 if (!exists("posterior")) {
+  if (!file.exists("results/data/posterior.parquet")) {
+    source("R/05_model_fitting.R")
+  }
   posterior <- read_parquet("results/data/posterior.parquet")
 }
 

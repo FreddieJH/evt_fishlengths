@@ -6,6 +6,9 @@ library(dplyr)
 library(purrr)
 
 if (!exists("scenarios")) {
+  if (!file.exists("results/data/scenarios.csv")) {
+    source("R/02_simulation.R")
+  }
   scenarios <-
     read_csv("results/data/scenarios.csv", show_col_types = FALSE) |>
     nest(data = topm) |>

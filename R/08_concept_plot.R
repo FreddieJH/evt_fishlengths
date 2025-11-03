@@ -11,6 +11,9 @@ library(arrow)
 source("R/01_funcs.R")
 
 if (!exists("estmax_posterior")) {
+    if (!file.exists("results/data/estmax_posterior.csv")) {
+        source("R/03_truemax.R")
+    }
     estmax_posterior <- read_csv(
         "results/data/estmax_posterior.csv",
         show_col_types = FALSE
@@ -18,10 +21,16 @@ if (!exists("estmax_posterior")) {
 }
 
 if (!exists("posterior")) {
+    if (!file.exists("results/data/posterior.parquet")) {
+        source("R/05_model_fitting.R")
+    }
     posterior <- read_parquet("results/data/posterior.parquet")
 }
 
 if (!exists("scenarios")) {
+    if (!file.exists("results/data/scenarios.csv")) {
+        source("R/02_simulation.R")
+    }
     scenarios <-
         read_csv("results/data/scenarios.csv", show_col_types = FALSE) |>
         nest(data = topm) |>
@@ -62,7 +71,11 @@ concept_data <-
         )
     ) |>
     unnest(rsample) |>
-    mutate(is_max = top1 == rsample) |>
+    mutate(is_max = rsample == max(rsample), .by = sample_id) |>
+    mutate(
+        topm = map(.x = m, .f = ~ sort(rsample, decreasing = TRUE)[1:.x]),
+        .by = sample_id
+    ) |>
     mutate(near_max = map2_lgl(rsample, topm, ~ .x %in% .y)) |>
     mutate(
         rank = case_when(
@@ -86,11 +99,23 @@ concept_samples_plot <-
     ) +
     geom_dotplot(
         aes(fill = rank),
+        fill = "#89e4dcff",
+        col = "grey70",
         method = "histodot",
         # binpositions = "all",
         dotsize = 4,
         binwidth = 0.2,
-        data = concept_data |> filter(rank != "low")
+        data = concept_data |> filter(rank == "high")
+    ) +
+    geom_dotplot(
+        aes(fill = rank),
+        fill = "black",
+        col = "grey70",
+        method = "histodot",
+        # binpositions = "all",
+        dotsize = 4,
+        binwidth = 0.2,
+        data = concept_data |> filter(rank == "highest")
     ) +
     scale_fill_manual(
         values = c(
@@ -644,10 +669,10 @@ g_max_efsm <- tibble(
 #     )
 
 p_ordering <- c(
-    "evt" = "Extreme Value Theory",
-    "evtg" = "Extreme Value Theory (Gumbel)",
-    "efs" = "Exact Finite Sample",
-    "efsm" = "Exact Finite Sample Multiple Maxima"
+    "evt" = "Extreme Value Theory (EVT: GEV)",
+    "evtg" = "Extreme Value Theory (EVT: Gumbel)",
+    "efs" = "Exact Finite Sample (EFS)",
+    "efsm" = "Exact Finite Sample Multiple Maxima  (EFSM)"
 )
 
 mods <- c(
@@ -667,10 +692,10 @@ concept_plot_data <-
     ) |>
     mutate(
         model_id_full = case_when(
-            model_id == "evt" ~ "Extreme Value Theory",
-            model_id == "evtg" ~ "Extreme Value Theory (Gumbel)",
-            model_id == "efs" ~ "Exact Finite Sample",
-            model_id == "efsm" ~ "Exact Finite Sample Multiple Maxima"
+            model_id == "evt" ~ "Extreme Value Theory (EVT: GEV)",
+            model_id == "evtg" ~ "Extreme Value Theory (EVT: Gumbel)",
+            model_id == "efs" ~ "Exact Finite Sample (EFS)",
+            model_id == "efsm" ~ "Exact Finite Sample Multiple Maxima  (EFSM)"
         )
     ) |>
     mutate(model_id_full = factor(model_id_full, levels = p_ordering))
@@ -689,10 +714,10 @@ est_vals <-
     # pivot_longer(-model_id) |>
     mutate(
         model_id_full = case_when(
-            model_id == "evt" ~ "Extreme Value Theory",
-            model_id == "evtg" ~ "Extreme Value Theory (Gumbel)",
-            model_id == "efs" ~ "Exact Finite Sample",
-            model_id == "efsm" ~ "Exact Finite Sample Multiple Maxima"
+            model_id == "evt" ~ "Extreme Value Theory (EVT: GEV)",
+            model_id == "evtg" ~ "Extreme Value Theory (EVT: Gumbel)",
+            model_id == "efs" ~ "Exact Finite Sample (EFS)",
+            model_id == "efsm" ~ "Exact Finite Sample Multiple Maxima  (EFSM)"
         )
     ) |>
     mutate(model_id_full = factor(model_id_full, levels = p_ordering))
@@ -727,12 +752,6 @@ pdf_plot <-
         alpha = 0.5
     ) +
     geom_line(aes(y = pdf20_fit, col = model_id), linewidth = 2) +
-
-    # geom_ribbon(aes(ymin = pdf_lwr, ymax = pdf_upr, fill = model_id), alpha = 0.5) +
-    # geom_line(aes(y = pdf_fit, col = model_id), linewidth = 2) +
-    # geom_vline(aes(xintercept = max), lty = "dotted", data = expmax_vlines) +
-    # geom_vline(aes(xintercept = max20), data = expmax_vlines, lty = "dashed") +
-    # geom_vline(aes(xintercept = max100), data = expmax_vlines, lty = "solid") +
     geom_point(
         aes(x = topm, y = 0),
         col = "black",
@@ -741,33 +760,36 @@ pdf_plot <-
         pch = 21,
         alpha = 0.7,
         data = concept_data |>
-            filter(is_max) |>
+            select(-rsample) |>
+            distinct() |>
             mutate(pos = rank(top1) / max(rank(top1) + 1)) |>
             unnest(topm) |>
             filter(topm != top1) |>
             mutate(
                 model_id_full = factor(
-                    "Exact Finite Sample Multiple Maxima",
+                    "Exact Finite Sample Multiple Maxima  (EFSM)",
                     levels = p_ordering
                 )
             )
     ) +
     geom_point(
-        aes(x = rsample, y = 0),
+        aes(x = top1, y = 0),
         col = "black",
         fill = data_colour_ismax,
         size = 4,
         pch = 21,
         alpha = 0.7,
         data = concept_data |>
-            filter(is_max) |>
+            select(-rsample) |>
+            distinct() |>
             mutate(pos = rank(top1) / max(rank(top1) + 1))
     ) +
-    geom_errorbarh(
+    geom_errorbar(
         aes(y = -0.1, xmin = est_max20_lwr, xmax = est_max20_upr),
         data = est_vals,
         inherit.aes = FALSE,
-        height = 0.01
+        width = 0.01,
+        orientation = "y"
     ) +
     geom_point(
         aes(y = -0.1, x = est_max20_fit),
@@ -781,7 +803,7 @@ pdf_plot <-
         aes(y = -0.05, xmin = est_max_lwr, xmax = est_max_upr),
         data = est_vals,
         inherit.aes = FALSE,
-        height = 0.01,
+        width = 0.01,
         orientation = "y"
     ) +
     geom_point(

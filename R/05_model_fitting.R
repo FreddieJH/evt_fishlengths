@@ -38,92 +38,97 @@ if (!"cmdstanr" %in% installed.packages()) {
 }
 
 efs_mod <- cmdstanr::cmdstan_model("models/efs.stan")
-  evt_mod <- cmdstanr::cmdstan_model("models/evt.stan")
-  evt_gumbel_mod <- cmdstanr::cmdstan_model("models/evt_gumbel.stan")
+evt_mod <- cmdstanr::cmdstan_model("models/evt.stan")
+evt_gumbel_mod <- cmdstanr::cmdstan_model("models/evt_gumbel.stan")
 
 
-    future::plan(multisession)
-    results_single <-
-      scenarios_stan |>
-      select(scenario_id, stan_list_single) |>
-      crossing(
-        tibble(
-          model_id = c("efs", "evt", "evtg"),
-          model = list(efs_mod, evt_mod, evt_gumbel_mod)
-        )
-      ) %>%
-      mutate(
-        fit = future_pmap(
-           .l = list(model, model_id, stan_list_single),
+future::plan(multisession)
+results_single <-
+  scenarios_stan |>
+  select(scenario_id, stan_list_single) |>
+  crossing(
+    tibble(
+      model_id = c("efs", "evt", "evtg"),
+      model = list(efs_mod, evt_mod, evt_gumbel_mod)
+    )
+  ) %>%
+  mutate(
+    fit = future_pmap(
+      .l = list(model, model_id, stan_list_single),
       .f = function(model, model_id, data_list) {
         model$sample(
           data = data_list,
           iter_warmup = 2000,
           iter_sampling = 1000,
           chains = 4,
-          parallel_chains = 4,  # use all chains in parallel per model
+          parallel_chains = 4, # use all chains in parallel per model
           refresh = 1000,
           init = init_func(model_id, median(data_list$x)),
           adapt_delta = 0.999,
           max_treedepth = 12
-        ) |> 
-        posterior::as_draws_df()
+        ) |>
+          posterior::as_draws_df()
       },
       .options = furrr_options(seed = TRUE)
     )
   ) %>%
   select(scenario_id, model_id, fit) %>%
   mutate(
-    fit = map(fit, ~ .x %>%
-      as_tibble() %>%
-      select(-lp__) %>%
-      pivot_longer(-c(.chain, .iteration, .draw), names_to = "par"))
-  ) %>%
-  unnest(fit)
-
-    results_multpl <-
-      scenarios_stan |>
-      select(scenario_id, stan_list_multpl) |>
-      crossing(tibble(
-        model_id = c("efsm"),
-        model = list(efs_mod)
-      )) %>%
-      mutate(
-        fit = future_pmap(
-          .l = list(model, model_id, stan_list_multpl),
-          .f = function(model, model_id, data_list) {
-            model$sample(
-            data = data_list,
-            iter_warmup = 2000,
-            iter_sampling = 1000,
-            chains = 4,
-            refresh = 1000,
-            parallel_chains = 1,
-            init = init_func(model_id, median(data_list$x)), # avoiding looking in complete wrong place
-            adapt_delta = 0.999, # to avoid the small number of divergent transitions
-            max_treedepth = 12 # increased from 10 to 12 after increasing the adapt_delta
-          ) |> 
-            posterior::as_draws_df()
-        },
-      .options = furrr_options(seed = TRUE)
-          ) 
-        )|> 
-            select(scenario_id, model_id, fit) %>%
-  mutate(
-    fit = map(fit, ~ .x %>%
-      as_tibble() %>%
-      select(-lp__) %>%
-      pivot_longer(-c(.chain, .iteration, .draw), names_to = "par"))
-  ) %>%
-  unnest(fit)
-
-    future::plan(sequential)
-
-  posterior <-
-    bind_rows(
-      read_parquet(results_single),
-      read_parquet(results_multpl)
+    fit = map(
+      fit,
+      ~ .x %>%
+        as_tibble() %>%
+        select(-lp__) %>%
+        pivot_longer(-c(.chain, .iteration, .draw), names_to = "par")
     )
+  ) %>%
+  unnest(fit)
 
-  write_parquet(posterior, "results/data/posterior.parquet")
+results_multpl <-
+  scenarios_stan |>
+  select(scenario_id, stan_list_multpl) |>
+  crossing(tibble(
+    model_id = c("efsm"),
+    model = list(efs_mod)
+  )) %>%
+  mutate(
+    fit = future_pmap(
+      .l = list(model, model_id, stan_list_multpl),
+      .f = function(model, model_id, data_list) {
+        model$sample(
+          data = data_list,
+          iter_warmup = 2000,
+          iter_sampling = 1000,
+          chains = 4,
+          refresh = 1000,
+          parallel_chains = 1,
+          init = init_func(model_id, median(data_list$x)), # avoiding looking in complete wrong place
+          adapt_delta = 0.999, # to avoid the small number of divergent transitions
+          max_treedepth = 12 # increased from 10 to 12 after increasing the adapt_delta
+        ) |>
+          posterior::as_draws_df()
+      },
+      .options = furrr_options(seed = TRUE)
+    )
+  ) |>
+  select(scenario_id, model_id, fit) %>%
+  mutate(
+    fit = map(
+      fit,
+      ~ .x %>%
+        as_tibble() %>%
+        select(-lp__) %>%
+        pivot_longer(-c(.chain, .iteration, .draw), names_to = "par")
+    )
+  ) %>%
+  unnest(fit)
 
+future::plan(sequential)
+
+posterior <-
+  bind_rows(
+    read_parquet(results_single),
+    read_parquet(results_multpl)
+  )
+
+write_parquet(posterior, "results/data/posterior.parquet")
